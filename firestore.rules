@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasTenantContext() {
+      return isSignedIn()
+        && request.auth.token.schoolId is string
+        && request.auth.token.role is string;
+    }
+
+    function isSchoolMember(schoolId) {
+      return hasTenantContext() && request.auth.token.schoolId == schoolId;
+    }
+
+    function hasRole(role) {
+      return hasTenantContext() && request.auth.token.role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isTeacher() {
+      return hasRole('teacher');
+    }
+
+    function isParent() {
+      return hasRole('parent');
+    }
+
+    function parentOwnsStudent(studentId) {
+      return isParent()
+        && exists(
+          /databases/$(database)/documents/schools/$(request.auth.token.schoolId)/parents/$(request.auth.uid)
+        )
+        && get(
+          /databases/$(database)/documents/schools/$(request.auth.token.schoolId)/parents/$(request.auth.uid)
+        ).data.studentIds.hasAny([studentId]);
+    }
+
+    match /schools/{schoolId} {
+      allow read: if isSchoolMember(schoolId);
+      allow write: if false;
+
+      match /info/{documentId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin();
+      }
+
+      match /students/{studentId} {
+        allow read: if isAdmin() || isTeacher() || parentOwnsStudent(studentId);
+        allow write: if isAdmin();
+      }
+
+      match /teachers/{teacherId} {
+        allow read: if isAdmin() || (isTeacher() && request.auth.uid == teacherId);
+        allow write: if isAdmin();
+      }
+
+      match /parents/{parentId} {
+        allow read: if isAdmin() || (isParent() && request.auth.uid == parentId);
+        allow write: if isAdmin();
+      }
+
+      match /classes/{classId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || isTeacher();
+      }
+
+      match /timetables/{documentId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || isTeacher();
+      }
+
+      match /fee_records/{recordId} {
+        allow read: if isAdmin() || parentOwnsStudent(resource.data.studentId);
+        allow write: if isAdmin();
+      }
+
+      match /notifications/{notificationId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || isTeacher();
+      }
+
+      match /calendar_events/{eventId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || isTeacher();
+      }
+    }
+  }
+}

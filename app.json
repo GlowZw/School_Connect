@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "School Connect",
+    "slug": "school-connect",
+    "scheme": "schoolconnect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#F5F7FA"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "com.schoolconnect.app",
+      "googleServicesFile": "./google-services.json"
+    },
+    "plugins": ["expo-router", "expo-notifications"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
