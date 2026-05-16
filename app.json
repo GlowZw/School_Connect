@@ -15,7 +15,7 @@
       "package": "com.schoolconnect.app",
       "googleServicesFile": "./google-services.json"
     },
-    "plugins": ["expo-router", "expo-notifications"],
+    "plugins": ["expo-router", "expo-notifications", "expo-asset"],
     "experiments": {
       "typedRoutes": true
     }
