@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function schoolId() {
+      return request.auth.token.schoolId;
+    }
+
+    function isSchoolMember(requestSchoolId) {
+      return isSignedIn() && schoolId() == requestSchoolId;
+    }
+
+    function hasPermission(permission) {
+      return request.auth.token.permissions is list
+        && request.auth.token.permissions.hasAny([permission]);
+    }
+
+    function isAllowedType() {
+      return request.resource.contentType.matches('image/.*')
+        || request.resource.contentType == 'application/pdf';
+    }
+
+    function isUnderSizeLimit() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    match /schools/{tenantId}/{allPaths=**} {
+      allow read: if isSchoolMember(tenantId);
+      allow write: if isSchoolMember(tenantId)
+        && hasPermission('canUploadMedia')
+        && isAllowedType()
+        && isUnderSizeLimit();
+    }
+  }
+}

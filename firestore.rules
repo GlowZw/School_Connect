@@ -6,6 +6,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function tokenSchoolId() {
+      return request.auth.token.schoolId;
+    }
+
     function hasTenantContext() {
       return isSignedIn()
         && request.auth.token.schoolId is string
@@ -13,11 +17,17 @@ service cloud.firestore {
     }
 
     function isSchoolMember(schoolId) {
-      return hasTenantContext() && request.auth.token.schoolId == schoolId;
+      return hasTenantContext() && tokenSchoolId() == schoolId;
     }
 
     function hasRole(role) {
       return hasTenantContext() && request.auth.token.role == role;
+    }
+
+    function hasPermission(permission) {
+      return hasTenantContext()
+        && request.auth.token.permissions is list
+        && request.auth.token.permissions.hasAny([permission]);
     }
 
     function isAdmin() {
@@ -86,9 +96,108 @@ service cloud.firestore {
         allow write: if isAdmin() || isTeacher();
       }
 
+      match /notification_preferences/{userId} {
+        allow read: if request.auth.uid == userId || isAdmin();
+        allow write: if request.auth.uid == userId || isAdmin();
+      }
+
       match /calendar_events/{eventId} {
         allow read: if isSchoolMember(schoolId);
         allow write: if isAdmin() || isTeacher();
+      }
+
+      match /conversations/{conversationId} {
+        allow read: if isSchoolMember(schoolId) && resource.data.participants.hasAny([request.auth.uid]);
+        allow create: if isSchoolMember(schoolId)
+          && request.resource.data.schoolId == schoolId
+          && request.resource.data.participants.hasAny([request.auth.uid]);
+        allow update: if isSchoolMember(schoolId)
+          && resource.data.participants.hasAny([request.auth.uid]);
+        allow delete: if false;
+
+        match /messages/{messageId} {
+          allow read: if isSchoolMember(schoolId)
+            && get(/databases/$(database)/documents/schools/$(schoolId)/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+          allow create: if isSchoolMember(schoolId)
+            && request.resource.data.senderId == request.auth.uid
+            && get(/databases/$(database)/documents/schools/$(schoolId)/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+          allow update: if isSchoolMember(schoolId)
+            && get(/databases/$(database)/documents/schools/$(schoolId)/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+          allow delete: if false;
+        }
+
+        match /typing/{typingId} {
+          allow read: if isSchoolMember(schoolId)
+            && get(/databases/$(database)/documents/schools/$(schoolId)/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+          allow write: if isSchoolMember(schoolId)
+            && get(/databases/$(database)/documents/schools/$(schoolId)/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+        }
+      }
+
+      match /payments/{paymentId} {
+        allow read: if isAdmin() || hasPermission('canManagePayments');
+        allow write: if false;
+      }
+
+      match /payment_transactions/{transactionId} {
+        allow read: if isAdmin()
+          || (isParent() && resource.data.parentId == request.auth.uid)
+          || hasPermission('canManagePayments');
+        allow write: if false;
+      }
+
+      match /fee_invoices/{invoiceId} {
+        allow read: if isAdmin()
+          || (isParent() && resource.data.parentId == request.auth.uid)
+          || hasPermission('canManagePayments');
+        allow write: if isAdmin() || hasPermission('canManagePayments');
+      }
+
+      match /sports/{documentId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || hasPermission('canManageSports');
+      }
+
+      match /culture/{documentId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || hasPermission('canManageCulture');
+      }
+
+      match /teams/{teamId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || hasPermission('canManageSports') || hasPermission('canManageCulture');
+      }
+
+      match /events/{eventId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || hasPermission('canManageSports') || hasPermission('canManageCulture');
+      }
+
+      match /awards/{awardId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || hasPermission('canPublishAwards');
+      }
+
+      match /achievements/{achievementId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || hasPermission('canPublishAwards');
+      }
+
+      match /student_recognition/{recognitionId} {
+        allow read: if isAdmin()
+          || isTeacher()
+          || (isParent() && parentOwnsStudent(resource.data.studentId));
+        allow write: if isAdmin() || hasPermission('canPublishAwards');
+      }
+
+      match /lunch_menus/{menuId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || hasPermission('canManageLunch');
+      }
+
+      match /daily_meals/{mealId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || hasPermission('canManageLunch');
       }
     }
   }
