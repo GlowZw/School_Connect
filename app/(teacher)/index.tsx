@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { ActionTile } from '@/components/ui/action-tile';
 import { MetricCard } from '@/components/ui/metric-card';
+import { ModuleDashboard } from '@/components/ui/module-dashboard';
 import { PortalHero } from '@/components/ui/portal-hero';
 import { Screen } from '@/components/ui/screen';
-import { SectionHeading } from '@/components/ui/section-heading';
+import { roleNavigationItems } from '@/constants/navigation';
 import { sampleConversations } from '@/features/messaging/service';
 import { sampleActivityEvents, sampleTeams } from '@/features/sports/service';
 import { theme } from '@/theme';
@@ -26,38 +26,18 @@ export default function TeacherDashboardScreen() {
           meta={`${sampleTeams.length} managed groups`}
         />
       </View>
-      <SectionHeading
+      <ModuleDashboard
+        modules={roleNavigationItems.teacher.filter((item) => item.label !== 'Dashboard')}
+        onNavigate={(href) => router.push(href as never)}
+        subtitle="Dashboard icons for the same modules available in the sidebar."
         title="Teaching Workflow"
-        subtitle="Operational tools built around realtime communication and engagement."
       />
-      <View style={styles.tiles}>
-        <ActionTile
-          title="Messages"
-          description="Reply to parents, use group threads, and monitor unread activity."
-          onPress={() => router.push('/shared/messages' as never)}
-        />
-        <ActionTile
-          title="Sports and Culture"
-          description="Manage fixtures, results, galleries, and club participation."
-          accent={theme.colors.accent}
-          onPress={() => router.push('/(teacher)/activities')}
-        />
-        <ActionTile
-          title="Awards"
-          description="Prepare recognition updates and publish achievements."
-          accent={theme.colors.warning}
-          onPress={() => router.push('/(teacher)/awards')}
-        />
-      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   metrics: {
-    gap: theme.spacing.md,
-  },
-  tiles: {
     gap: theme.spacing.md,
   },
 });

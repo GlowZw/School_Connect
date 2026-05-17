@@ -1,5 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AppIcon, type AppIconName } from '@/components/ui/app-icon';
 import { Card } from '@/components/ui/card';
 import { theme } from '@/theme';
 
@@ -7,6 +9,7 @@ type ActionTileProps = {
   title: string;
   description: string;
   accent?: string;
+  iconName: AppIconName;
   onPress?: () => void;
 };
 
@@ -14,20 +17,41 @@ export function ActionTile({
   title,
   description,
   accent = theme.colors.primary,
+  iconName,
   onPress,
 }: ActionTileProps) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const animateTo = (value: number) => {
+    Animated.spring(scale, {
+      toValue: value,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 110,
+    }).start();
+  };
+
   return (
-    <Pressable disabled={!onPress} onPress={onPress}>
-      <Card>
-        <View style={styles.row}>
-          <View style={[styles.icon, { backgroundColor: accent }]} />
-          <View style={styles.content}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.description}>{description}</Text>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        disabled={!onPress}
+        onPress={onPress}
+        onPressIn={() => animateTo(0.98)}
+        onPressOut={() => animateTo(1)}
+      >
+        <Card>
+          <View style={styles.row}>
+            <View style={[styles.icon, { backgroundColor: accent }]}>
+              <AppIcon name={iconName} size={18} />
+            </View>
+            <View style={styles.content}>
+              <Text style={styles.title}>{title}</Text>
+              <Text style={styles.description}>{description}</Text>
+            </View>
           </View>
-        </View>
-      </Card>
-    </Pressable>
+        </Card>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -38,9 +62,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   icon: {
-    width: 18,
-    height: 18,
-    borderRadius: 6,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,

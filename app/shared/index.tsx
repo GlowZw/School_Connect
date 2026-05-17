@@ -23,6 +23,7 @@ export default function SharedRouteScreen() {
         <ActionTile
           title="Open Messages"
           description="Conversation list, chat thread, attachments, and typing states."
+          iconName="message-square"
           onPress={() => router.push('/shared/messages' as never)}
         />
       </View>

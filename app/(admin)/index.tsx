@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { ActionTile } from '@/components/ui/action-tile';
 import { MetricCard } from '@/components/ui/metric-card';
+import { ModuleDashboard } from '@/components/ui/module-dashboard';
 import { PortalHero } from '@/components/ui/portal-hero';
 import { Screen } from '@/components/ui/screen';
-import { SectionHeading } from '@/components/ui/section-heading';
+import { roleNavigationItems } from '@/constants/navigation';
 import { sampleAwards } from '@/features/awards/service';
 import { sampleConversations } from '@/features/messaging/service';
 import { sampleInvoices } from '@/features/payments/service';
@@ -28,50 +28,18 @@ export default function AdminDashboardScreen() {
           meta="Permission-based controls enabled"
         />
       </View>
-      <SectionHeading
+      <ModuleDashboard
+        modules={roleNavigationItems.admin.filter((item) => item.label !== 'Dashboard')}
+        onNavigate={(href) => router.push(href as never)}
+        subtitle="Home dashboard shortcuts that mirror the sidebar menu."
         title="Administration"
-        subtitle="Tenant-safe management surfaces for School Connect Phase 2."
       />
-      <View style={styles.tiles}>
-        <ActionTile
-          title="Messages"
-          description="Broadcast announcements and monitor conversation activity."
-          onPress={() => router.push('/shared/messages' as never)}
-        />
-        <ActionTile
-          title="Payments"
-          description="Monitor fee structures, reports, and verification flows."
-          accent={theme.colors.success}
-          onPress={() => router.push('/(admin)/payments')}
-        />
-        <ActionTile
-          title="Sports and Culture"
-          description="Manage events, media, and participation."
-          accent={theme.colors.accent}
-          onPress={() => router.push('/(admin)/activities')}
-        />
-        <ActionTile
-          title="Awards"
-          description="Issue recognition, categories, and certificates."
-          accent={theme.colors.warning}
-          onPress={() => router.push('/(admin)/awards')}
-        />
-        <ActionTile
-          title="Lunch Menu"
-          description="Publish menu schedules and dietary notices."
-          accent={theme.colors.secondary}
-          onPress={() => router.push('/(admin)/lunch')}
-        />
-      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   metrics: {
-    gap: theme.spacing.md,
-  },
-  tiles: {
     gap: theme.spacing.md,
   },
 });
