@@ -19,6 +19,7 @@ import {
   getSettingsRoute,
   isNavigationItemActive,
 } from '@/components/layout/portal-navigation';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { logout } from '@/features/auth/auth-service';
 import { theme } from '@/theme';
 import type { UserRole } from '@/types/auth';
@@ -42,25 +43,11 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
   const pathname = usePathname();
   const { width } = useWindowDimensions();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isCompact = width < 920;
   const initials = useMemo(() => getInitials(displayName || email), [displayName, email]);
   const navItems = getNavigationItems(role);
-
-  const handleLogout = async () => {
-    if (isLoggingOut) {
-      return;
-    }
-
-    setIsLoggingOut(true);
-
-    try {
-      await logout();
-      router.replace('/(auth)/login');
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
 
   const handleNavigate = (href: string) => {
     router.replace(href as never);
@@ -93,6 +80,22 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
     }
 
     handleNavigate(getSettingsRoute(accountRole));
+  };
+
+  const handleLogoutConfirm = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+
+    try {
+      await logout();
+      setShowLogoutModal(false);
+      router.replace('/(auth)/login');
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const sidebarContent = (
@@ -139,7 +142,7 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
       </View>
 
       <Pressable
-        onPress={handleLogout}
+        onPress={() => setShowLogoutModal(true)}
         style={[styles.logoutButton, isLoggingOut ? styles.logoutButtonDisabled : null]}
       >
         <Text style={styles.logoutText}>{isLoggingOut ? 'Signing out...' : 'Log out'}</Text>
@@ -202,6 +205,17 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
           </View>
         </Modal>
       ) : null}
+
+      <ConfirmationModal
+        cancelLabel="No"
+        confirmDisabled={isLoggingOut}
+        confirmLabel={isLoggingOut ? 'Logging out...' : 'Yes'}
+        message="Are you sure you want to logout?"
+        onCancel={() => setShowLogoutModal(false)}
+        onConfirm={handleLogoutConfirm}
+        title="Logout"
+        visible={showLogoutModal}
+      />
     </SafeAreaView>
   );
 }
