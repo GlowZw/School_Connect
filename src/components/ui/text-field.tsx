@@ -1,16 +1,14 @@
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
+import type { TextInputProps } from 'react-native';
+
 import { theme } from '@/theme';
 
-type TextFieldProps = {
+type TextFieldProps = TextInputProps & {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
-  placeholder?: string;
-  secureTextEntry?: boolean;
   error?: string;
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  keyboardType?: 'default' | 'email-address';
 };
 
 export function TextField({
@@ -22,19 +20,30 @@ export function TextField({
   error,
   autoCapitalize = 'sentences',
   keyboardType = 'default',
+  contextMenuHidden = false,
+  selectTextOnFocus = false,
+  spellCheck = true,
+  autoCorrect = true,
+  ...props
 }: TextFieldProps) {
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        contextMenuHidden={contextMenuHidden}
         keyboardType={keyboardType}
         onChangeText={onChangeText}
         placeholder={placeholder ?? label}
         placeholderTextColor={theme.colors.mutedText}
+        selectTextOnFocus={selectTextOnFocus}
+        selectionColor={theme.colors.primary}
         secureTextEntry={secureTextEntry}
+        spellCheck={spellCheck}
         style={[styles.input, error ? styles.inputError : null]}
         value={value}
+        {...props}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
