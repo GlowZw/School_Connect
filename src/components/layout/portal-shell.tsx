@@ -12,7 +12,13 @@ import {
 import { usePathname, useRouter } from 'expo-router';
 
 import { BottomNavBar, type BottomNavKey } from '@/components/layout/bottom-nav-bar';
-import { roleNavigationItems } from '@/constants/navigation';
+import {
+  getActiveBottomKey,
+  getHomeRoute,
+  getNavigationItems,
+  getSettingsRoute,
+  isNavigationItemActive,
+} from '@/components/layout/portal-navigation';
 import { logout } from '@/features/auth/auth-service';
 import { theme } from '@/theme';
 import type { UserRole } from '@/types/auth';
@@ -39,7 +45,7 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isCompact = width < 920;
   const initials = useMemo(() => getInitials(displayName || email), [displayName, email]);
-  const navItems = roleNavigationItems[role];
+  const navItems = getNavigationItems(role);
 
   const handleLogout = async () => {
     if (isLoggingOut) {
@@ -115,7 +121,7 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
         <Text style={styles.navLabel}>Navigation</Text>
         <View style={styles.navList}>
           {navItems.map((item) => {
-            const active = pathname === item.href;
+            const active = isNavigationItemActive(pathname, item.href);
 
             return (
               <Pressable
@@ -198,38 +204,6 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
       ) : null}
     </SafeAreaView>
   );
-}
-
-function getHomeRoute(role: UserRole) {
-  return role === 'parent' ? '/(parent)' : role === 'teacher' ? '/(teacher)' : '/(admin)';
-}
-
-function getSettingsRoute(role: UserRole) {
-  return role === 'parent'
-    ? '/(parent)/settings'
-    : role === 'teacher'
-      ? '/(teacher)/settings'
-      : '/(admin)/settings';
-}
-
-function getActiveBottomKey(pathname: string, role: UserRole): BottomNavKey | null {
-  if (pathname === getHomeRoute(role)) {
-    return 'home';
-  }
-
-  if (pathname === '/shared/notifications') {
-    return 'notifications';
-  }
-
-  if (pathname === '/shared/profile') {
-    return 'profile';
-  }
-
-  if (pathname === getSettingsRoute(role)) {
-    return 'settings';
-  }
-
-  return null;
 }
 
 function getInitials(value: string) {
