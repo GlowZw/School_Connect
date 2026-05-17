@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ActionTile } from '@/components/ui/action-tile';
 import { SectionHeading } from '@/components/ui/section-heading';
@@ -13,19 +13,23 @@ type ModuleDashboardProps = {
 };
 
 export function ModuleDashboard({ title, subtitle, modules, onNavigate }: ModuleDashboardProps) {
+  const { width } = useWindowDimensions();
+  const isWide = width >= 1080;
+
   return (
     <View style={styles.wrapper}>
       <SectionHeading title={title} subtitle={subtitle} />
-      <View style={styles.grid}>
+      <View style={[styles.grid, isWide ? styles.gridWide : null]}>
         {modules.map((module) => (
-          <ActionTile
-            key={module.href}
-            accent={module.accent}
-            description={module.description}
-            iconName={module.iconName}
-            onPress={() => onNavigate(module.href)}
-            title={module.label}
-          />
+          <View key={module.href} style={isWide ? styles.gridItemWide : null}>
+            <ActionTile
+              accent={module.accent}
+              description={module.description}
+              iconName={module.iconName}
+              onPress={() => onNavigate(module.href)}
+              title={module.label}
+            />
+          </View>
         ))}
       </View>
     </View>
@@ -38,5 +42,13 @@ const styles = StyleSheet.create({
   },
   grid: {
     gap: theme.spacing.md,
+  },
+  gridWide: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  gridItemWide: {
+    width: '48.5%',
   },
 });

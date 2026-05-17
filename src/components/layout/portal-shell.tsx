@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Modal,
   Pressable,
   SafeAreaView,
@@ -19,6 +20,7 @@ import {
   getSettingsRoute,
   isNavigationItemActive,
 } from '@/components/layout/portal-navigation';
+import { AppIcon } from '@/components/ui/app-icon';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { logout } from '@/features/auth/auth-service';
 import { theme } from '@/theme';
@@ -127,15 +129,13 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
             const active = isNavigationItemActive(pathname, item.href);
 
             return (
-              <Pressable
+              <SidebarNavButton
+                active={active}
+                iconName={item.iconName}
                 key={item.href}
+                label={item.label}
                 onPress={() => handleNavigate(item.href)}
-                style={[styles.navItem, active ? styles.navItemActive : null]}
-              >
-                <Text style={[styles.navText, active ? styles.navTextActive : null]}>
-                  {item.label}
-                </Text>
-              </Pressable>
+              />
             );
           })}
         </View>
@@ -217,6 +217,39 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
         visible={showLogoutModal}
       />
     </SafeAreaView>
+  );
+}
+
+type SidebarNavButtonProps = {
+  active: boolean;
+  iconName: Parameters<typeof AppIcon>[0]['name'];
+  label: string;
+  onPress: () => void;
+};
+
+function SidebarNavButton({ active, iconName, label, onPress }: SidebarNavButtonProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  const animateTo = (value: number) => {
+    Animated.timing(translateX, {
+      toValue: value,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ translateX }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => animateTo(4)}
+        onPressOut={() => animateTo(0)}
+        style={[styles.navItem, active ? styles.navItemActive : null]}
+      >
+        <AppIcon color={active ? theme.colors.surface : '#E2E8F7'} name={iconName} size={17} />
+        <Text style={[styles.navText, active ? styles.navTextActive : null]}>{label}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -322,9 +355,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   navItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: theme.radius.sm,
+    borderRadius: theme.radius.md,
     backgroundColor: 'transparent',
   },
   navItemActive: {
@@ -333,6 +369,7 @@ const styles = StyleSheet.create({
   navText: {
     color: '#E2E8F7',
     fontWeight: '600',
+    fontSize: 14,
   },
   navTextActive: {
     color: theme.colors.surface,
