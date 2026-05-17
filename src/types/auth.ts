@@ -1,3 +1,5 @@
+import type { AppPermission } from '@/types/permissions';
+
 export type UserRole = 'parent' | 'teacher' | 'admin';
 
 export type AuthProfile = {
@@ -5,6 +7,7 @@ export type AuthProfile = {
   email: string;
   schoolId: string;
   role: UserRole;
+  permissions: AppPermission[];
   emailVerified: boolean;
   displayName?: string;
 };

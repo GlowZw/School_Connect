@@ -15,5 +15,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     gap: theme.spacing.sm,
+    ...theme.shadow.card,
   },
 });

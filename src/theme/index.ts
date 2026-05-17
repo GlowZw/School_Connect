@@ -14,4 +14,16 @@ export const theme = {
     md: 12,
     lg: 20,
   },
+  shadow: {
+    card: {
+      shadowColor: '#172033',
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
+      shadowOffset: {
+        width: 0,
+        height: 8,
+      },
+      elevation: 2,
+    },
+  },
 };
