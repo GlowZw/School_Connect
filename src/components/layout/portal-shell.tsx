@@ -1,0 +1,479 @@
+import type { PropsWithChildren } from 'react';
+import { useMemo, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { usePathname, useRouter } from 'expo-router';
+
+import { BottomNavBar, type BottomNavKey } from '@/components/layout/bottom-nav-bar';
+import { roleNavigationItems } from '@/constants/navigation';
+import { logout } from '@/features/auth/auth-service';
+import { theme } from '@/theme';
+import type { UserRole } from '@/types/auth';
+
+type PortalShellProps = PropsWithChildren<{
+  role: UserRole | 'shared';
+  accountRole: UserRole;
+  displayName: string;
+  email: string;
+}>;
+
+const roleLabels: Record<PortalShellProps['role'], string> = {
+  parent: 'Parent Account',
+  teacher: 'Teacher Account',
+  admin: 'Admin Account',
+  shared: 'Shared Workspace',
+};
+
+export function PortalShell({ role, accountRole, displayName, email, children }: PortalShellProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { width } = useWindowDimensions();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isCompact = width < 920;
+  const initials = useMemo(() => getInitials(displayName || email), [displayName, email]);
+  const navItems = roleNavigationItems[role];
+
+  const handleLogout = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+
+    try {
+      await logout();
+      router.replace('/(auth)/login');
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const handleNavigate = (href: string) => {
+    router.replace(href as never);
+    if (isCompact) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const activeBottomKey = getActiveBottomKey(pathname, accountRole);
+
+  const handleBottomNavPress = (key: BottomNavKey) => {
+    if (key === 'home') {
+      handleNavigate(getHomeRoute(accountRole));
+      return;
+    }
+
+    if (key === 'back') {
+      router.back();
+      return;
+    }
+
+    if (key === 'notifications') {
+      handleNavigate('/shared/notifications');
+      return;
+    }
+
+    if (key === 'profile') {
+      handleNavigate('/shared/profile');
+      return;
+    }
+
+    handleNavigate(getSettingsRoute(accountRole));
+  };
+
+  const sidebarContent = (
+    <View style={styles.sidebarContent}>
+      <View style={styles.brandBlock}>
+        <Text style={styles.brandTitle}>School-Connect</Text>
+        <Text style={styles.brandSubtitle}>Multi-tenant school workspace</Text>
+      </View>
+
+      <View style={styles.profileCard}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials}</Text>
+        </View>
+        <View style={styles.profileCopy}>
+          <Text numberOfLines={1} style={styles.profileName}>
+            {displayName}
+          </Text>
+          <Text numberOfLines={1} style={styles.profileEmail}>
+            {email}
+          </Text>
+          <Text style={styles.profileRole}>{roleLabels[role]}</Text>
+        </View>
+      </View>
+
+      <View style={styles.navSection}>
+        <Text style={styles.navLabel}>Navigation</Text>
+        <View style={styles.navList}>
+          {navItems.map((item) => {
+            const active = pathname === item.href;
+
+            return (
+              <Pressable
+                key={item.href}
+                onPress={() => handleNavigate(item.href)}
+                style={[styles.navItem, active ? styles.navItemActive : null]}
+              >
+                <Text style={[styles.navText, active ? styles.navTextActive : null]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <Pressable
+        onPress={handleLogout}
+        style={[styles.logoutButton, isLoggingOut ? styles.logoutButtonDisabled : null]}
+      >
+        <Text style={styles.logoutText}>{isLoggingOut ? 'Signing out...' : 'Log out'}</Text>
+      </Pressable>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {!isCompact ? <View style={styles.sidebar}>{sidebarContent}</View> : null}
+
+        <View style={[styles.main, isCompact ? styles.mainCompact : null]}>
+          <View style={styles.topBar}>
+            <View style={styles.topBarLeading}>
+              {isCompact ? (
+                <Pressable onPress={() => setSidebarOpen(true)} style={styles.menuButton}>
+                  <Text style={styles.menuButtonText}>Menu</Text>
+                </Pressable>
+              ) : null}
+              <Text style={styles.topBarTitle}>School Connect</Text>
+              <Text style={styles.topBarSubtitle}>{roleLabels[role]}</Text>
+            </View>
+            <View style={styles.topBarProfile}>
+              <View style={styles.topBarAvatar}>
+                <Text style={styles.topBarAvatarText}>{initials}</Text>
+              </View>
+              <View style={styles.topBarProfileCopy}>
+                <Text numberOfLines={1} style={styles.topBarName}>
+                  {displayName}
+                </Text>
+                <Text style={styles.topBarRole}>{roleLabels[role]}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.content}>{children}</View>
+          <BottomNavBar activeKey={activeBottomKey} onPress={handleBottomNavPress} />
+        </View>
+      </View>
+
+      {isCompact ? (
+        <Modal
+          animationType="slide"
+          onRequestClose={() => setSidebarOpen(false)}
+          transparent
+          visible={sidebarOpen}
+        >
+          <View style={styles.modalBackdrop}>
+            <Pressable style={styles.modalDismissArea} onPress={() => setSidebarOpen(false)} />
+            <View style={styles.modalSidebar}>
+              <View style={styles.modalSidebarHeader}>
+                <Text style={styles.modalSidebarTitle}>Navigation</Text>
+                <Pressable onPress={() => setSidebarOpen(false)} style={styles.closeButton}>
+                  <Text style={styles.closeButtonText}>Close</Text>
+                </Pressable>
+              </View>
+              {sidebarContent}
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+    </SafeAreaView>
+  );
+}
+
+function getHomeRoute(role: UserRole) {
+  return role === 'parent' ? '/(parent)' : role === 'teacher' ? '/(teacher)' : '/(admin)';
+}
+
+function getSettingsRoute(role: UserRole) {
+  return role === 'parent'
+    ? '/(parent)/settings'
+    : role === 'teacher'
+      ? '/(teacher)/settings'
+      : '/(admin)/settings';
+}
+
+function getActiveBottomKey(pathname: string, role: UserRole): BottomNavKey | null {
+  if (pathname === getHomeRoute(role)) {
+    return 'home';
+  }
+
+  if (pathname === '/shared/notifications') {
+    return 'notifications';
+  }
+
+  if (pathname === '/shared/profile') {
+    return 'profile';
+  }
+
+  if (pathname === getSettingsRoute(role)) {
+    return 'settings';
+  }
+
+  return null;
+}
+
+function getInitials(value: string) {
+  const segments = value
+    .split(' ')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    return 'SC';
+  }
+
+  return segments
+    .slice(0, 2)
+    .map((item) => item[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  container: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  sidebar: {
+    width: 280,
+    backgroundColor: theme.colors.sidebar,
+  },
+  sidebarContent: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.lg,
+  },
+  brandBlock: {
+    gap: theme.spacing.xs,
+  },
+  brandTitle: {
+    color: theme.colors.surface,
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  brandSubtitle: {
+    color: theme.colors.sidebarMuted,
+    fontSize: 13,
+  },
+  profileCard: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: theme.colors.surface,
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  profileCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  profileName: {
+    color: theme.colors.surface,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  profileEmail: {
+    color: '#D9E2F2',
+    fontSize: 12,
+  },
+  profileRole: {
+    color: '#A78BFA',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  navSection: {
+    gap: theme.spacing.sm,
+    flex: 1,
+  },
+  navLabel: {
+    color: theme.colors.sidebarMuted,
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '700',
+  },
+  navList: {
+    gap: theme.spacing.sm,
+  },
+  navItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: theme.radius.sm,
+    backgroundColor: 'transparent',
+  },
+  navItemActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  navText: {
+    color: '#E2E8F7',
+    fontWeight: '600',
+  },
+  navTextActive: {
+    color: theme.colors.surface,
+  },
+  logoutButton: {
+    backgroundColor: 'rgba(180,35,24,0.18)',
+    borderRadius: theme.radius.sm,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  logoutButtonDisabled: {
+    opacity: 0.7,
+  },
+  logoutText: {
+    color: '#FFD8D2',
+    fontWeight: '700',
+  },
+  main: {
+    flex: 1,
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  mainCompact: {
+    paddingTop: theme.spacing.sm,
+  },
+  topBar: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    ...theme.shadow.card,
+  },
+  topBarLeading: {
+    gap: theme.spacing.xs,
+  },
+  menuButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F1EAFF',
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  menuButtonText: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  topBarTitle: {
+    color: theme.colors.text,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  topBarSubtitle: {
+    color: theme.colors.mutedText,
+    fontSize: 13,
+  },
+  topBarProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    maxWidth: '55%',
+  },
+  topBarAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#F1EAFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarAvatarText: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+  },
+  topBarProfileCopy: {
+    flexShrink: 1,
+  },
+  topBarName: {
+    color: theme.colors.text,
+    fontWeight: '700',
+  },
+  topBarRole: {
+    color: theme.colors.mutedText,
+    fontSize: 12,
+  },
+  content: {
+    flex: 1,
+    gap: theme.spacing.md,
+  },
+  modalBackdrop: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(19,28,48,0.38)',
+  },
+  modalDismissArea: {
+    flex: 1,
+  },
+  modalSidebar: {
+    width: 300,
+    maxWidth: '86%',
+    backgroundColor: theme.colors.sidebar,
+    paddingTop: theme.spacing.lg,
+  },
+  modalSidebarHeader: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalSidebarTitle: {
+    color: theme.colors.surface,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  closeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  closeButtonText: {
+    color: '#D9E2F2',
+    fontWeight: '600',
+  },
+});
