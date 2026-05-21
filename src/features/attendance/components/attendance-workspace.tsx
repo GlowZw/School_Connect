@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -10,7 +10,7 @@ import {
   useAttendanceRecords,
 } from '@/features/attendance/use-attendance-records';
 import { getAttendancePercentage, markAttendance } from '@/features/attendance/service';
-import { listClasses, listSchoolStudents } from '@/features/students/service';
+import { listClasses, listSchoolStudents, listTeacherClasses } from '@/features/students/service';
 import { useAuthStore } from '@/store/auth-store';
 import { theme } from '@/theme';
 import type { AttendanceStatus } from '@/types/attendance';
@@ -19,7 +19,7 @@ type AttendanceWorkspaceProps = {
   mode: 'teacher' | 'admin';
 };
 
-const statuses: AttendanceStatus[] = ['present', 'absent', 'late', 'excused'];
+const statuses: AttendanceStatus[] = ['present', 'absent', 'late'];
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -33,8 +33,11 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
 
   const classesQuery = useQuery({
     enabled: Boolean(schoolId),
-    queryKey: ['classes', schoolId],
-    queryFn: () => listClasses(schoolId ?? ''),
+    queryKey: ['classes', schoolId, mode, profile?.uid],
+    queryFn: () =>
+      mode === 'teacher'
+        ? listTeacherClasses(schoolId ?? '', profile?.uid ?? '')
+        : listClasses(schoolId ?? ''),
   });
 
   const studentsQuery = useQuery({
@@ -44,14 +47,20 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
   });
 
   const classes = classesQuery.data ?? [];
+  useEffect(() => {
+    if (mode === 'teacher' && !selectedClassId && classes[0]) {
+      setSelectedClassId(classes[0].id);
+    }
+  }, [classes, mode, selectedClassId]);
+
   const students = useMemo(() => {
     const allStudents = studentsQuery.data ?? [];
     if (!selectedClassId) {
-      return allStudents;
+      return mode === 'teacher' ? [] : allStudents;
     }
 
     return allStudents.filter((student) => student.classIds.includes(selectedClassId));
-  }, [selectedClassId, studentsQuery.data]);
+  }, [mode, selectedClassId, studentsQuery.data]);
 
   const attendanceQuery = useAttendanceRecords(schoolId, { classId: selectedClassId });
   const records = attendanceQuery.data ?? [];
@@ -96,12 +105,14 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
       </View>
 
       <View style={styles.classList}>
-        <Pressable
-          onPress={() => setSelectedClassId(undefined)}
-          style={[styles.classChip, !selectedClassId ? styles.classChipActive : null]}
-        >
-          <Text style={!selectedClassId ? styles.classChipTextActive : styles.classChipText}>All</Text>
-        </Pressable>
+        {mode === 'admin' ? (
+          <Pressable
+            onPress={() => setSelectedClassId(undefined)}
+            style={[styles.classChip, !selectedClassId ? styles.classChipActive : null]}
+          >
+            <Text style={!selectedClassId ? styles.classChipTextActive : styles.classChipText}>All</Text>
+          </Pressable>
+        ) : null}
         {classes.map((schoolClass) => (
           <Pressable
             key={schoolClass.id}
