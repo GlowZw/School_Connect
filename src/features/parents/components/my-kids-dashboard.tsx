@@ -191,9 +191,24 @@ export function MyKidsDashboard() {
           <Card>
             {activeTab === 'overview' ? (
               <>
-                <Text style={styles.sectionTitle}>{selectedStudent.fullName}</Text>
-                <Text style={styles.bodyText}>Classes: {childClasses.map((item) => item.name).join(', ') || 'None assigned'}</Text>
+                <Text style={styles.sectionTitle}>Profile info</Text>
+                <Text style={styles.bodyText}>Name: {selectedStudent.fullName}</Text>
+                <Text style={styles.bodyText}>Grade: {selectedStudent.grade ?? 'Grade pending'}</Text>
+                <Text style={styles.bodyText}>
+                  Primary class: {selectedStudent.className ?? childClasses[0]?.name ?? 'Class pending'}
+                </Text>
+                <View style={styles.profileDivider} />
+                <Text style={styles.sectionTitle}>Academic info</Text>
+                <Text style={styles.bodyText}>
+                  Classes: {childClasses.map((item) => item.name).join(', ') || 'None assigned'}
+                </Text>
+                <Text style={styles.bodyText}>
+                  Subjects: {childClasses.map((item) => item.subject).filter(Boolean).join(', ') || 'Subjects pending'}
+                </Text>
+                <View style={styles.profileDivider} />
+                <Text style={styles.sectionTitle}>Attendance summary</Text>
                 <Text style={styles.bodyText}>Attendance: {attendancePercentage}%</Text>
+                <Text style={styles.bodyText}>Records reviewed: {attendanceRecords.length}</Text>
                 <Text style={styles.bodyText}>Next event: {upcomingEvent?.title ?? 'No upcoming event'}</Text>
               </>
             ) : null}
@@ -343,6 +358,11 @@ const styles = StyleSheet.create({
   bodyText: {
     color: theme.colors.text,
     lineHeight: 20,
+  },
+  profileDivider: {
+    backgroundColor: theme.colors.border,
+    height: 1,
+    marginVertical: theme.spacing.xs,
   },
   emptyText: {
     color: theme.colors.mutedText,
