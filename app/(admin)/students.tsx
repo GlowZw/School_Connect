@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
 import { TextField } from '@/components/ui/text-field';
+import { ExcelStudentImport } from '@/features/students/components/excel-student-import';
 import {
   createStudent,
   deleteStudent,
@@ -27,6 +28,7 @@ const emptyForm: StudentInput = {
 export default function AdminStudentsScreen() {
   const profile = useAuthStore((state) => state.profile);
   const schoolId = profile?.schoolId;
+  const role = profile?.role;
   const queryClient = useQueryClient();
   const [form, setForm] = useState<StudentInput>(emptyForm);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
@@ -112,6 +114,8 @@ export default function AdminStudentsScreen() {
         <Text style={styles.eyebrow}>Admin Portal</Text>
         <Text style={styles.title}>Students</Text>
       </View>
+
+      <ExcelStudentImport role={role} schoolId={schoolId} />
 
       <Card>
         <Text style={styles.sectionTitle}>{editingStudentId ? 'Edit student' : 'Add student'}</Text>
