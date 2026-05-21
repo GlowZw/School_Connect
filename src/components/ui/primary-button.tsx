@@ -1,4 +1,5 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 
 import { theme } from '@/theme';
 
@@ -7,6 +8,7 @@ type PrimaryButtonProps = {
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
 };
 
 export function PrimaryButton({
@@ -14,6 +16,7 @@ export function PrimaryButton({
   onPress,
   loading = false,
   disabled = false,
+  style,
 }: PrimaryButtonProps) {
   return (
     <Pressable
@@ -21,6 +24,7 @@ export function PrimaryButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        style,
         disabled || loading ? styles.buttonDisabled : null,
         pressed ? styles.buttonPressed : null,
       ]}
