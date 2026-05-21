@@ -14,6 +14,8 @@ import { TextField } from '@/components/ui/text-field';
 import { register } from '@/features/auth/auth-service';
 import { type RegisterFormValues, registerSchema } from '@/features/auth/validation';
 import type { SchoolDirectoryEntry } from '@/services/tenant/school-service';
+import { useAuthStore } from '@/store/auth-store';
+import { useTenantStore } from '@/store/tenant-store';
 import { theme } from '@/theme';
 import type { UserRole } from '@/types/auth';
 
@@ -66,6 +68,8 @@ export default function RegisterScreen() {
 
     try {
       await register(values);
+      useAuthStore.getState().reset();
+      useTenantStore.getState().resetTenantContext();
       setSuccessVisible(true);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Unable to register.');
