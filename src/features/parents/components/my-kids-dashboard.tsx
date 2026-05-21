@@ -1,16 +1,23 @@
 import { useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 import { AppIcon } from '@/components/ui/app-icon';
 import { Card } from '@/components/ui/card';
+import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
+import { TextField } from '@/components/ui/text-field';
 import { getAttendancePercentage } from '@/features/attendance/service';
 import { useAttendanceRecords } from '@/features/attendance/use-attendance-records';
 import { useCalendarEvents } from '@/features/calendar/use-calendar-events';
 import { getCalendarEventDateKey } from '@/features/calendar/service';
-import { listClasses, subscribeParentStudents } from '@/features/students/service';
+import {
+  linkParentToStudent,
+  listClasses,
+  searchStudents,
+  subscribeParentStudents,
+} from '@/features/students/service';
 import { useAuthStore } from '@/store/auth-store';
 import { theme } from '@/theme';
 import type { StudentProfile } from '@/types/students';
@@ -26,6 +33,7 @@ export function MyKidsDashboard() {
   const queryClient = useQueryClient();
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ChildTab>('overview');
+  const [studentSearch, setStudentSearch] = useState('');
 
   const studentsQuery = useQuery({
     enabled: Boolean(schoolId && parentId),
@@ -50,6 +58,26 @@ export function MyKidsDashboard() {
     enabled: Boolean(schoolId),
     queryKey: ['classes', schoolId],
     queryFn: () => listClasses(schoolId ?? ''),
+  });
+
+  const searchQuery = useQuery({
+    enabled: Boolean(schoolId && studentSearch.trim().length >= 2),
+    queryKey: ['student-search', schoolId, studentSearch],
+    queryFn: () => searchStudents(schoolId ?? '', studentSearch),
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: (studentId: string) => {
+      if (!schoolId || !parentId) {
+        throw new Error('Missing parent or school context.');
+      }
+
+      return linkParentToStudent(schoolId, parentId, studentId);
+    },
+    onSuccess: () => {
+      setStudentSearch('');
+      queryClient.invalidateQueries({ queryKey: ['parent-students', schoolId, parentId] });
+    },
   });
 
   const students = studentsQuery.data ?? [];
@@ -78,6 +106,36 @@ export function MyKidsDashboard() {
         <Text style={styles.eyebrow}>Parent Portal</Text>
         <Text style={styles.title}>My Kids</Text>
       </View>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Link child account</Text>
+        <TextField
+          label="Search student name"
+          onChangeText={setStudentSearch}
+          value={studentSearch}
+        />
+        {(searchQuery.data ?? []).map((student) => {
+          const alreadyLinked = students.some((linkedStudent) => linkedStudent.id === student.id);
+
+          return (
+            <View key={student.id} style={styles.searchResult}>
+              <View style={styles.studentResultCopy}>
+                <Text style={styles.childName}>{student.fullName}</Text>
+                <Text style={styles.childMeta}>
+                  {student.grade ?? 'Grade pending'} · {student.className ?? 'Class pending'}
+                </Text>
+              </View>
+              <PrimaryButton
+                disabled={alreadyLinked}
+                label={alreadyLinked ? 'Linked' : 'Link'}
+                loading={linkMutation.isPending}
+                onPress={() => linkMutation.mutate(student.id)}
+                style={styles.linkButton}
+              />
+            </View>
+          );
+        })}
+      </Card>
 
       {students.length === 0 ? (
         <Card>
@@ -269,6 +327,18 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 18,
     fontWeight: '800',
+  },
+  searchResult: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  studentResultCopy: {
+    flex: 1,
+  },
+  linkButton: {
+    minWidth: 92,
+    paddingHorizontal: theme.spacing.md,
   },
   bodyText: {
     color: theme.colors.text,
