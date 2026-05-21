@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
-import { getRoleHomeRoute, roleHomeRoutes } from '@/constants/routes';
+import { getRoleHomeRoute } from '@/constants/routes';
+import type { roleHomeRoutes } from '@/constants/routes';
 import { useAuthStore } from '@/store/auth-store';
 import type { UserRole } from '@/types/auth';
 

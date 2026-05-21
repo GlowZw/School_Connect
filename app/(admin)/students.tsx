@@ -53,9 +53,11 @@ export default function AdminStudentsScreen() {
         throw new Error('Missing school context.');
       }
 
-      return editingStudentId
-        ? updateStudent(schoolId, editingStudentId, form)
-        : createStudent(schoolId, form);
+      if (editingStudentId) {
+        return updateStudent(schoolId, editingStudentId, form);
+      }
+
+      return createStudent(schoolId, form).then(() => undefined);
     },
     onSuccess: () => {
       setForm(emptyForm);
