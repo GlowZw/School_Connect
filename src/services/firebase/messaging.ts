@@ -5,6 +5,10 @@ import { Platform } from 'react-native';
 import type { NotificationCategory } from '@/types/permissions';
 
 export type NotificationChannel = NotificationCategory;
+export type RegisteredPushToken = {
+  token: string;
+  type: 'fcm' | 'expo';
+};
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -15,7 +19,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function registerForPushNotificationsAsync(): Promise<string | null> {
+export async function registerForPushNotificationsAsync(): Promise<RegisteredPushToken | null> {
   const permissions = await Notifications.getPermissionsAsync();
   const existingStatus = permissions.status;
   let finalStatus = existingStatus;
@@ -45,6 +49,37 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     return null;
   }
 
+  if (Platform.OS === 'android') {
+    const response = await Notifications.getDevicePushTokenAsync();
+    return {
+      token: response.data,
+      type: 'fcm',
+    };
+  }
+
   const response = await Notifications.getExpoPushTokenAsync({ projectId });
-  return response.data;
+  return {
+    token: response.data,
+    type: 'expo',
+  };
+}
+
+export async function scheduleLocalNotificationAsync(input: {
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+  secondsFromNow: number;
+}) {
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: input.title,
+      body: input.body,
+      data: input.data,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: input.secondsFromNow,
+      repeats: false,
+    },
+  });
 }

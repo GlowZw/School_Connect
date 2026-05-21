@@ -1,12 +1,14 @@
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 
 initializeApp();
 
 const db = getFirestore();
+const messaging = getMessaging();
 
 const reminderOffsets = {
   '1 day before': 24 * 60 * 60 * 1000,
@@ -25,6 +27,175 @@ function assertSchoolMember(request, schoolId) {
   }
 }
 
+function getEventDate(event) {
+  if (event.eventDate && typeof event.eventDate.toDate === 'function') {
+    return event.eventDate.toDate();
+  }
+
+  if (typeof event.date === 'string') {
+    return new Date(`${event.date}T${event.time || '09:00'}`);
+  }
+
+  return new Date();
+}
+
+function getNotificationCopy(event, isUpdate = false) {
+  if (event.category === 'exam') {
+    return {
+      title: isUpdate ? 'Exam Schedule Updated' : 'New Exam Scheduled',
+      body: event.title || 'A new exam has been added.',
+    };
+  }
+
+  if (event.category === 'meeting') {
+    return {
+      title: isUpdate ? 'Parent Meeting Updated' : 'Parent Meeting Added',
+      body: event.title || 'A parent meeting has been added.',
+    };
+  }
+
+  if (event.category === 'assignment') {
+    return {
+      title: isUpdate ? 'Assignment Deadline Updated' : 'New Assignment Deadline',
+      body: event.title || 'An assignment deadline has been updated.',
+    };
+  }
+
+  return {
+    title: isUpdate ? 'Calendar Event Updated' : 'New Calendar Event',
+    body: event.title || 'A calendar event has been added.',
+  };
+}
+
+async function getAudienceTokens(schoolId, audience) {
+  const targetAudience = Array.isArray(audience) && audience.length > 0 ? audience : ['parents'];
+  const snapshot = await db
+    .collection(`schools/${schoolId}/notification_tokens`)
+    .where('audiences', 'array-contains-any', targetAudience)
+    .limit(500)
+    .get();
+
+  return snapshot.docs
+    .map((tokenDoc) => ({
+      ref: tokenDoc.ref,
+      token: tokenDoc.data().token,
+      tokenType: tokenDoc.data().tokenType,
+    }))
+    .filter((item) => typeof item.token === 'string' && item.tokenType === 'fcm');
+}
+
+async function sendMulticastWithRetry(message, attempts = 3) {
+  let lastError;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await messaging.sendEachForMulticast(message);
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+
+  throw lastError;
+}
+
+async function notifyCalendarAudience(schoolId, eventId, event, isUpdate = false) {
+  const tokens = await getAudienceTokens(schoolId, event.audience);
+  const copy = getNotificationCopy(event, isUpdate);
+  const createdAt =
+    event.createdAt && typeof event.createdAt.toDate === 'function'
+      ? event.createdAt.toDate().toISOString()
+      : new Date().toISOString();
+
+  const notificationRef = db.collection(`schools/${schoolId}/notifications`).doc();
+  await notificationRef.set({
+    title: copy.title,
+    body: copy.body,
+    schoolId,
+    eventId,
+    type: event.category || 'events',
+    createdAt: Timestamp.now(),
+  });
+
+  if (tokens.length === 0) {
+    console.warn(`No Android FCM tokens found for calendar event ${eventId} in ${schoolId}.`);
+    return;
+  }
+
+  for (let index = 0; index < tokens.length; index += 500) {
+    const chunk = tokens.slice(index, index + 500);
+    const response = await sendMulticastWithRetry({
+      tokens: chunk.map((item) => item.token),
+      notification: copy,
+      data: {
+        title: copy.title,
+        body: copy.body,
+        schoolId,
+        eventId,
+        type: event.category || 'events',
+        createdAt,
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'school-connect-default',
+          sound: 'default',
+        },
+      },
+    });
+
+    const cleanup = [];
+    response.responses.forEach((result, responseIndex) => {
+      const code = result.error && result.error.code;
+      if (
+        code === 'messaging/registration-token-not-registered' ||
+        code === 'messaging/invalid-registration-token'
+      ) {
+        cleanup.push(chunk[responseIndex].ref.delete());
+      }
+    });
+
+    await Promise.all(cleanup);
+  }
+}
+
+exports.notifyCalendarEventCreated = onDocumentCreated(
+  'schools/{schoolId}/calendar/{eventId}',
+  async (event) => {
+    const data = event.data && event.data.data();
+    if (!data) {
+      return;
+    }
+
+    await notifyCalendarAudience(event.params.schoolId, event.params.eventId, data, false);
+  },
+);
+
+exports.notifyCalendarEventUpdated = onDocumentUpdated(
+  'schools/{schoolId}/calendar/{eventId}',
+  async (event) => {
+    const before = event.data && event.data.before.data();
+    const after = event.data && event.data.after.data();
+    if (!after) {
+      return;
+    }
+
+    const meaningfulChange =
+      !before ||
+      before.title !== after.title ||
+      before.description !== after.description ||
+      before.category !== after.category ||
+      before.date !== after.date ||
+      before.time !== after.time ||
+      String(before.eventDate && before.eventDate.toMillis && before.eventDate.toMillis()) !==
+        String(after.eventDate && after.eventDate.toMillis && after.eventDate.toMillis());
+
+    if (meaningfulChange) {
+      await notifyCalendarAudience(event.params.schoolId, event.params.eventId, after, true);
+    }
+  },
+);
+
 exports.scheduleCalendarReminders = onCall(async (request) => {
   const { schoolId, eventId } = request.data || {};
 
@@ -42,7 +213,7 @@ exports.scheduleCalendarReminders = onCall(async (request) => {
   }
 
   const event = eventSnapshot.data();
-  const eventDate = event.eventDate.toDate();
+  const eventDate = getEventDate(event);
   const batch = db.batch();
 
   for (const reminder of event.reminderTimes || []) {
@@ -93,18 +264,11 @@ exports.deliverCalendarReminders = onSchedule('every 30 minutes', async () => {
 
     for (const reminderDoc of reminders.docs) {
       const reminder = reminderDoc.data();
-      const tokensSnapshot = await db
-        .collection(`schools/${schoolId}/notification_tokens`)
-        .where('audiences', 'array-contains-any', reminder.audience.length ? reminder.audience : ['parents'])
-        .limit(500)
-        .get();
-
-      const tokens = tokensSnapshot.docs
-        .map((tokenDoc) => tokenDoc.data().token)
-        .filter((token) => typeof token === 'string');
+      const tokenEntries = await getAudienceTokens(schoolId, reminder.audience);
+      const tokens = tokenEntries.map((item) => item.token);
 
       if (tokens.length > 0) {
-        await getMessaging().sendEachForMulticast({
+        await sendMulticastWithRetry({
           tokens,
           notification: {
             title: 'Calendar reminder',
@@ -114,6 +278,13 @@ exports.deliverCalendarReminders = onSchedule('every 30 minutes', async () => {
             schoolId,
             eventId: reminder.eventId,
             category: 'events',
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              channelId: 'school-connect-default',
+              sound: 'default',
+            },
           },
         });
       }
