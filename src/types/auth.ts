@@ -6,6 +6,7 @@ export type AuthProfile = {
   uid: string;
   email: string;
   schoolId: string;
+  schoolName: string;
   role: UserRole;
   permissions: AppPermission[];
   emailVerified: boolean;

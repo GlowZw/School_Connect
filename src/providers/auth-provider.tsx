@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 
 import { rolePermissions } from '@/constants/permissions';
+import { getUserProfile } from '@/features/auth/profile-service';
 import { getFirebaseAuth } from '@/services/firebase/auth';
 import { useAuthStore } from '@/store/auth-store';
 import { useTenantStore } from '@/store/tenant-store';
@@ -26,7 +27,6 @@ function getPermissions(role: UserRole, claimedPermissions: unknown): AppPermiss
 export function AuthProvider({ children }: PropsWithChildren) {
   const setProfile = useAuthStore((state) => state.setProfile);
   const setStatus = useAuthStore((state) => state.setStatus);
-  const setSchoolId = useTenantStore((state) => state.setSchoolId);
 
   useEffect(() => {
     setStatus('loading');
@@ -34,32 +34,79 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const unsubscribe = onAuthStateChanged(getFirebaseAuth(), async (user) => {
       if (!user || !user.email) {
         setProfile(null);
-        setSchoolId(null);
+        useTenantStore.getState().resetTenantContext();
         return;
       }
 
       const tokenResult = await user.getIdTokenResult();
       const claimedRole = tokenResult.claims.role;
-      const role = isUserRole(claimedRole) ? claimedRole : 'parent';
-      const schoolId =
+      let schoolId =
         typeof tokenResult.claims.schoolId === 'string'
           ? tokenResult.claims.schoolId
           : 'pending-school-association';
+      let role = isUserRole(claimedRole) ? claimedRole : null;
+      let claimedPermissions = tokenResult.claims.permissions;
+      let schoolName = 'Unknown School';
+
+      const userProfile = await getUserProfile(user.uid);
+      if (userProfile) {
+        if (!role || schoolId === 'pending-school-association') {
+          role = userProfile.role;
+          schoolId = userProfile.schoolId;
+          claimedPermissions = userProfile.permissions;
+        }
+        schoolName = userProfile.schoolName || 'Unknown School';
+      }
+
+      if (!role) {
+        role = 'parent';
+      }
+
+      let branding = null;
+      let logoUrl = null;
+
+      if (schoolId && schoolId !== 'pending-school-association') {
+        const { getSchoolDirectoryEntry } = await import('@/services/tenant/school-service');
+        const schoolEntry = await getSchoolDirectoryEntry(schoolId);
+        if (schoolEntry) {
+          schoolName = schoolEntry.name;
+          branding = schoolEntry.branding;
+          logoUrl = schoolEntry.logoUrl;
+        }
+      }
 
       setProfile({
         uid: user.uid,
         email: user.email,
         schoolId,
+        schoolName,
         role,
-        permissions: getPermissions(role, tokenResult.claims.permissions),
+        permissions: getPermissions(role, claimedPermissions),
         emailVerified: user.emailVerified,
         displayName: user.displayName ?? undefined,
       });
-      setSchoolId(schoolId);
+
+      useTenantStore.getState().setTenantContext(
+        schoolId,
+        schoolName,
+        branding,
+        logoUrl,
+      );
+
+      if (schoolId && schoolId !== 'pending-school-association') {
+        const { registerNotificationToken } = await import(
+          '@/services/notifications/notification-service'
+        );
+        const notificationAudience =
+          role === 'parent' ? 'parents' : role === 'teacher' ? 'teachers' : 'admin';
+        await registerNotificationToken(schoolId, user.uid, [notificationAudience]).catch(
+          () => undefined,
+        );
+      }
     });
 
     return unsubscribe;
-  }, [setProfile, setSchoolId, setStatus]);
+  }, [setProfile, setStatus]);
 
   return children;
 }
