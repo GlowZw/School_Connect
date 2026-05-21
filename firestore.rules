@@ -21,35 +21,38 @@ service cloud.firestore {
         || (isSignedIn() && get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data.schoolId == schoolId);
     }
 
-    function hasRole(role) {
-      return hasTenantContext() && request.auth.token.role == role;
+    function hasRoleForSchool(schoolId, role) {
+      return hasTenantContext()
+        && tokenSchoolId() == schoolId
+        && request.auth.token.role == role;
     }
 
-    function hasPermission(permission) {
+    function hasPermissionForSchool(schoolId, permission) {
       return hasTenantContext()
+        && tokenSchoolId() == schoolId
         && request.auth.token.permissions is list
         && request.auth.token.permissions.hasAny([permission]);
     }
 
-    function isAdmin() {
-      return hasRole('admin');
+    function isAdmin(schoolId) {
+      return hasRoleForSchool(schoolId, 'admin');
     }
 
-    function isTeacher() {
-      return hasRole('teacher');
+    function isTeacher(schoolId) {
+      return hasRoleForSchool(schoolId, 'teacher');
     }
 
-    function isParent() {
-      return hasRole('parent');
+    function isParent(schoolId) {
+      return hasRoleForSchool(schoolId, 'parent');
     }
 
-    function parentOwnsStudent(studentId) {
-      return isParent()
+    function parentOwnsStudent(schoolId, studentId) {
+      return isParent(schoolId)
         && exists(
-          /databases/$(database)/documents/schools/$(request.auth.token.schoolId)/parents/$(request.auth.uid)
+          /databases/$(database)/documents/schools/$(schoolId)/parents/$(request.auth.uid)
         )
         && get(
-          /databases/$(database)/documents/schools/$(request.auth.token.schoolId)/parents/$(request.auth.uid)
+          /databases/$(database)/documents/schools/$(schoolId)/parents/$(request.auth.uid)
         ).data.studentIds.hasAny([studentId]);
     }
 
@@ -59,51 +62,58 @@ service cloud.firestore {
 
       match /info/{documentId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin();
+        allow write: if isAdmin(schoolId);
       }
 
       match /students/{studentId} {
-        allow read: if isAdmin() || isTeacher() || parentOwnsStudent(studentId);
-        allow write: if isAdmin();
+        allow read: if isAdmin(schoolId) || isTeacher(schoolId) || parentOwnsStudent(schoolId, studentId);
+        allow write: if isAdmin(schoolId)
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /teachers/{teacherId} {
-        allow read: if isAdmin() || (isTeacher() && request.auth.uid == teacherId);
-        allow write: if isAdmin();
+        allow read: if isAdmin(schoolId) || (isTeacher(schoolId) && request.auth.uid == teacherId);
+        allow write: if isAdmin(schoolId)
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /parents/{parentId} {
-        allow read: if isAdmin() || (isParent() && request.auth.uid == parentId);
-        allow write: if isAdmin();
+        allow read: if isAdmin(schoolId) || (isParent(schoolId) && request.auth.uid == parentId);
+        allow write: if (isAdmin(schoolId) || (isParent(schoolId) && request.auth.uid == parentId))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /classes/{classId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || isTeacher();
+        allow write: if (isAdmin(schoolId) || isTeacher(schoolId))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /timetables/{documentId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || isTeacher();
+        allow write: if (isAdmin(schoolId) || isTeacher(schoolId))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /fee_records/{recordId} {
-        allow read: if isAdmin() || parentOwnsStudent(resource.data.studentId);
-        allow write: if isAdmin();
+        allow read: if isAdmin(schoolId) || parentOwnsStudent(schoolId, resource.data.studentId);
+        allow write: if isAdmin(schoolId)
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /notifications/{notificationId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || isTeacher();
+        allow write: if (isAdmin(schoolId) || isTeacher(schoolId))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /notification_preferences/{userId} {
-        allow read: if request.auth.uid == userId || isAdmin();
-        allow write: if request.auth.uid == userId || isAdmin();
+        allow read: if isSchoolMember(schoolId) && (request.auth.uid == userId || isAdmin(schoolId));
+        allow write: if isSchoolMember(schoolId) && (request.auth.uid == userId || isAdmin(schoolId));
       }
 
       match /notification_tokens/{userId} {
-        allow read: if request.auth.uid == userId || isAdmin();
+        allow read: if isSchoolMember(schoolId) && (request.auth.uid == userId || isAdmin(schoolId));
         allow write: if request.auth.uid == userId
           && request.resource.data.schoolId == schoolId
           && request.resource.data.userId == request.auth.uid;
@@ -111,18 +121,19 @@ service cloud.firestore {
 
       match /calendar_events/{eventId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || isTeacher();
+        allow write: if (isAdmin(schoolId) || isTeacher(schoolId))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /calendar/{eventId} {
         allow read: if isSchoolMember(schoolId);
-        allow create: if (isAdmin() || isTeacher())
+        allow create: if (isAdmin(schoolId) || isTeacher(schoolId))
           && request.resource.data.schoolId == schoolId
           && request.resource.data.createdBy == request.auth.uid;
-        allow update: if (isAdmin() || isTeacher())
+        allow update: if (isAdmin(schoolId) || isTeacher(schoolId))
           && resource.data.schoolId == schoolId
           && request.resource.data.schoolId == schoolId;
-        allow delete: if isAdmin() || isTeacher();
+        allow delete: if isAdmin(schoolId) || isTeacher(schoolId);
       }
 
       match /conversations/{conversationId} {
@@ -154,82 +165,94 @@ service cloud.firestore {
       }
 
       match /payments/{paymentId} {
-        allow read: if isAdmin() || hasPermission('canManagePayments');
+        allow read: if isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canManagePayments');
         allow write: if false;
       }
 
       match /payment_transactions/{transactionId} {
-        allow read: if isAdmin()
-          || (isParent() && resource.data.parentId == request.auth.uid)
-          || hasPermission('canManagePayments');
+        allow read: if isAdmin(schoolId)
+          || (isParent(schoolId) && resource.data.parentId == request.auth.uid)
+          || hasPermissionForSchool(schoolId, 'canManagePayments');
         allow write: if false;
       }
 
       match /fee_invoices/{invoiceId} {
-        allow read: if isAdmin()
-          || (isParent() && resource.data.parentId == request.auth.uid)
-          || hasPermission('canManagePayments');
-        allow write: if isAdmin() || hasPermission('canManagePayments');
+        allow read: if isAdmin(schoolId)
+          || (isParent(schoolId) && resource.data.parentId == request.auth.uid)
+          || hasPermissionForSchool(schoolId, 'canManagePayments');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canManagePayments'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /sports/{documentId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || hasPermission('canManageSports');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canManageSports'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /culture/{documentId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || hasPermission('canManageCulture');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canManageCulture'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /teams/{teamId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || hasPermission('canManageSports') || hasPermission('canManageCulture');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canManageSports') || hasPermissionForSchool(schoolId, 'canManageCulture'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /events/{eventId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || hasPermission('canManageSports') || hasPermission('canManageCulture');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canManageSports') || hasPermissionForSchool(schoolId, 'canManageCulture'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /awards/{awardId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || hasPermission('canPublishAwards');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canPublishAwards'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /achievements/{achievementId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || hasPermission('canPublishAwards');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canPublishAwards'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /student_recognition/{recognitionId} {
-        allow read: if isAdmin()
-          || isTeacher()
-          || (isParent() && parentOwnsStudent(resource.data.studentId));
-        allow write: if isAdmin() || hasPermission('canPublishAwards');
+        allow read: if isAdmin(schoolId)
+          || isTeacher(schoolId)
+          || (isParent(schoolId) && parentOwnsStudent(schoolId, resource.data.studentId));
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canPublishAwards'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /lunch_menus/{menuId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || hasPermission('canManageLunch');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canManageLunch'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /daily_meals/{mealId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || hasPermission('canManageLunch');
+        allow write: if (isAdmin(schoolId) || hasPermissionForSchool(schoolId, 'canManageLunch'))
+          && request.resource.data.schoolId == schoolId;
       }
 
       match /attendance/{attendanceId} {
-        allow read: if isAdmin()
-          || isTeacher()
-          || (isParent() && parentOwnsStudent(resource.data.studentId));
-        allow create, update: if isAdmin() || isTeacher();
-        allow delete: if isAdmin();
+        allow read: if isAdmin(schoolId)
+          || isTeacher(schoolId)
+          || (isParent(schoolId) && parentOwnsStudent(schoolId, resource.data.studentId));
+        allow create, update: if (isAdmin(schoolId) || isTeacher(schoolId))
+          && request.resource.data.schoolId == schoolId;
+        allow delete: if isAdmin(schoolId);
       }
 
       match /class_registers/{registerId} {
         allow read: if isSchoolMember(schoolId);
-        allow write: if isAdmin() || isTeacher();
+        allow write: if (isAdmin(schoolId) || isTeacher(schoolId))
+          && request.resource.data.schoolId == schoolId;
       }
     }
 
