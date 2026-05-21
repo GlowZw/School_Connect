@@ -8,9 +8,12 @@ export type CalendarEvent = {
   id: string;
   schoolId: string;
   createdBy: string;
+  createdByName?: string;
   title: string;
   description: string;
   category: EventCategory;
+  date: string;
+  time: string;
   eventDate: Timestamp;
   reminderTimes: string[];
   audience: EventAudience[];
@@ -23,7 +26,9 @@ export type CalendarEventInput = {
   title: string;
   description: string;
   category: EventCategory;
-  eventDate: Date;
+  date: string;
+  time: string;
+  createdByName?: string;
   reminderTimes: string[];
   audience: EventAudience[];
   classIds?: string[];

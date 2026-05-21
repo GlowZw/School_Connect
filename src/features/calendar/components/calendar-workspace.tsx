@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   StyleSheet,
@@ -25,6 +24,7 @@ import {
   createCalendarEvent,
   deleteCalendarEvent,
   getCalendarEventDateKey,
+  updateCalendarEvent,
 } from '@/features/calendar/service';
 import { useAuthStore } from '@/store/auth-store';
 import { theme } from '@/theme';
@@ -58,10 +58,14 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [filter, setFilter] = useState<'all' | EventCategory>('all');
   const [modalVisible, setModalVisible] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<EventCategory>('school');
   const [audience, setAudience] = useState<EventAudience[]>(['parents']);
+  const [eventTime, setEventTime] = useState('09:00');
+  const [reminders, setReminders] = useState<string[]>(['1 day before']);
 
   const { data: rawEvents = [], isLoading } = useCalendarEvents(schoolId);
 
@@ -95,21 +99,57 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
     );
   }, [events, selectedDate, selectedEvents.length]);
 
-  const createMutation = useMutation({
-    mutationFn: () =>
-      createCalendarEvent(schoolId ?? '', profile?.uid ?? '', {
+  const resetForm = () => {
+    setEditingEvent(null);
+    setTitle('');
+    setDescription('');
+    setCategory('school');
+    setAudience(['parents']);
+    setEventTime('09:00');
+    setReminders(['1 day before']);
+  };
+
+  const openCreateForm = () => {
+    resetForm();
+    setModalVisible(true);
+  };
+
+  const openEditForm = (event: CalendarEvent) => {
+    setEditingEvent(event);
+    setSelectedDate(event.date);
+    setTitle(event.title);
+    setDescription(event.description);
+    setCategory(event.category);
+    setAudience(event.audience);
+    setEventTime(event.time);
+    setReminders(event.reminderTimes.length > 0 ? event.reminderTimes : ['1 day before']);
+    setModalVisible(true);
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
         title,
         description,
         category,
-        eventDate: new Date(`${selectedDate}T09:00:00`),
-        reminderTimes: reminderOptions,
+        date: selectedDate,
+        time: eventTime,
+        createdByName: profile?.displayName ?? profile?.email,
+        reminderTimes: reminders,
         audience,
-      }),
+      };
+
+      if (editingEvent) {
+        await updateCalendarEvent(schoolId ?? '', editingEvent.id, payload);
+        return;
+      }
+
+      await createCalendarEvent(schoolId ?? '', profile?.uid ?? '', payload);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: calendarEventsQueryKey(schoolId) });
       setModalVisible(false);
-      setTitle('');
-      setDescription('');
+      resetForm();
     },
   });
 
@@ -128,7 +168,7 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
           <Text style={styles.title}>Calendar</Text>
         </View>
         {canManage ? (
-          <Pressable onPress={() => setModalVisible(true)} style={styles.iconButton}>
+          <Pressable onPress={openCreateForm} style={styles.iconButton}>
             <AppIcon name="plus" size={20} />
           </Pressable>
         ) : null}
@@ -192,20 +232,26 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
         </Card>
       ) : (
         eventList.map((event) => (
-          <Card key={event.id}>
+          <Pressable key={event.id} onPress={() => setSelectedEvent(event)}>
+          <Card>
             <View style={styles.eventHeader}>
               <View style={styles.eventTitleGroup}>
                 <Text style={styles.eventTitle}>{event.title}</Text>
-                <Text style={styles.eventMeta}>{getCalendarEventDateKey(event)}</Text>
+                <Text style={styles.eventMeta}>
+                  {getCalendarEventDateKey(event)} at {event.time}
+                </Text>
               </View>
               <Chip label={event.category} tone="accent" />
             </View>
             {event.description ? <Text style={styles.description}>{event.description}</Text> : null}
+            {event.createdByName ? (
+              <Text style={styles.eventMeta}>Teacher: {event.createdByName}</Text>
+            ) : null}
             <Text style={styles.eventMeta}>Reminders: {event.reminderTimes.join(', ')}</Text>
             {canManage ? (
               <View style={styles.actions}>
                 <Pressable
-                  onPress={() => Alert.alert('Edit event', 'Open this event from the form to update details.')}
+                  onPress={() => openEditForm(event)}
                   style={styles.secondaryButton}
                 >
                   <AppIcon color={theme.colors.primary} name="edit-2" size={16} />
@@ -221,17 +267,40 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
               </View>
             ) : null}
           </Card>
+          </Pressable>
         ))
       )}
 
       <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <Screen scrollable>
           <View style={styles.header}>
-            <Text style={styles.title}>Add Event</Text>
-            <Pressable onPress={() => setModalVisible(false)} style={styles.closeButton}>
+            <Text style={styles.title}>{editingEvent ? 'Edit Event' : 'Add Event'}</Text>
+            <Pressable
+              onPress={() => {
+                setModalVisible(false);
+                resetForm();
+              }}
+              style={styles.closeButton}
+            >
               <AppIcon color={theme.colors.text} name="x" size={20} />
             </Pressable>
           </View>
+          <Text style={styles.label}>Date</Text>
+          <TextInput
+            onChangeText={setSelectedDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={theme.colors.mutedText}
+            style={styles.input}
+            value={selectedDate}
+          />
+          <Text style={styles.label}>Time</Text>
+          <TextInput
+            onChangeText={setEventTime}
+            placeholder="09:00"
+            placeholderTextColor={theme.colors.mutedText}
+            style={styles.input}
+            value={eventTime}
+          />
           <TextInput
             onChangeText={setTitle}
             placeholder="Title"
@@ -280,13 +349,76 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
               );
             })}
           </View>
+          <Text style={styles.label}>Reminder</Text>
+          <View style={styles.filters}>
+            {reminderOptions.map((item) => {
+              const selected = reminders.includes(item);
+              return (
+                <Pressable
+                  key={item}
+                  onPress={() =>
+                    setReminders((current) =>
+                      selected ? current.filter((value) => value !== item) : [...current, item],
+                    )
+                  }
+                  style={[styles.filterButton, selected ? styles.filterActive : null]}
+                >
+                  <Text style={selected ? styles.filterTextActive : styles.filterText}>{item}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <PrimaryButton
-            disabled={!title || !schoolId}
-            label="Save Event"
-            loading={createMutation.isPending}
-            onPress={() => createMutation.mutate()}
+            disabled={!title || !schoolId || !selectedDate || !eventTime}
+            label={editingEvent ? 'Save Changes' : 'Save Event'}
+            loading={saveMutation.isPending}
+            onPress={() => saveMutation.mutate()}
           />
         </Screen>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setSelectedEvent(null)}
+        transparent
+        visible={Boolean(selectedEvent)}
+      >
+        <View style={styles.detailBackdrop}>
+          <View style={styles.detailSheet}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Event Details</Text>
+              <Pressable onPress={() => setSelectedEvent(null)} style={styles.closeButton}>
+                <AppIcon color={theme.colors.text} name="x" size={20} />
+              </Pressable>
+            </View>
+            {selectedEvent ? (
+              <View style={styles.detailContent}>
+                <Text style={styles.eventTitle}>{selectedEvent.title}</Text>
+                <Text style={styles.eventMeta}>
+                  Date: {selectedEvent.date} at {selectedEvent.time}
+                </Text>
+                <Text style={styles.eventMeta}>
+                  Teacher: {selectedEvent.createdByName || 'School staff'}
+                </Text>
+                <Text style={styles.eventMeta}>Category: {selectedEvent.category}</Text>
+                <Text style={styles.description}>{selectedEvent.description || 'No description.'}</Text>
+                <Text style={styles.eventMeta}>
+                  Upcoming reminders: {selectedEvent.reminderTimes.join(', ') || 'None'}
+                </Text>
+                {canManage ? (
+                  <PrimaryButton
+                    label="Edit Event"
+                    onPress={() => {
+                      const event = selectedEvent;
+                      setSelectedEvent(null);
+                      openEditForm(event);
+                    }}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        </View>
       </Modal>
     </Screen>
   );
@@ -451,5 +583,21 @@ const styles = StyleSheet.create({
   label: {
     color: theme.colors.text,
     fontWeight: '700',
+  },
+  detailBackdrop: {
+    backgroundColor: 'rgba(19,28,48,0.38)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  detailSheet: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.radius.lg,
+    borderTopRightRadius: theme.radius.lg,
+    gap: theme.spacing.md,
+    maxHeight: '82%',
+    padding: theme.spacing.lg,
+  },
+  detailContent: {
+    gap: theme.spacing.md,
   },
 });

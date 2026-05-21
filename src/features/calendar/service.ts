@@ -27,14 +27,25 @@ function calendarCollection(schoolId: string) {
 }
 
 function mapCalendarEvent(id: string, data: Record<string, unknown>): CalendarEvent {
+  const eventDate = data.eventDate as CalendarEvent['eventDate'];
+  const fallbackDate = eventDate?.toDate ? eventDate.toDate() : new Date();
+  const date = typeof data.date === 'string' ? data.date : fallbackDate.toISOString().slice(0, 10);
+  const time =
+    typeof data.time === 'string'
+      ? data.time
+      : fallbackDate.toTimeString().slice(0, 5);
+
   return {
     id,
     schoolId: String(data.schoolId),
     createdBy: String(data.createdBy),
+    createdByName: typeof data.createdByName === 'string' ? data.createdByName : undefined,
     title: String(data.title ?? ''),
     description: String(data.description ?? ''),
     category: data.category as CalendarEvent['category'],
-    eventDate: data.eventDate as CalendarEvent['eventDate'],
+    date,
+    time,
+    eventDate,
     reminderTimes: Array.isArray(data.reminderTimes)
       ? data.reminderTimes.filter((item): item is string => typeof item === 'string')
       : [],
@@ -83,7 +94,7 @@ export async function createCalendarEvent(
     ...input,
     schoolId,
     createdBy,
-    eventDate: Timestamp.fromDate(input.eventDate),
+    eventDate: Timestamp.fromDate(new Date(`${input.date}T${input.time}:00`)),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -100,7 +111,13 @@ export async function updateCalendarEvent(
 ) {
   const updatePayload = {
     ...input,
-    ...(input.eventDate ? { eventDate: Timestamp.fromDate(input.eventDate) } : {}),
+    ...(input.date && input.time
+      ? {
+          eventDate: Timestamp.fromDate(
+            new Date(`${input.date}T${input.time}:00`),
+          ),
+        }
+      : {}),
     updatedAt: serverTimestamp(),
   };
 
@@ -118,5 +135,5 @@ export async function scheduleCalendarReminders(schoolId: string, eventId: strin
 }
 
 export function getCalendarEventDateKey(event: CalendarEvent) {
-  return event.eventDate.toDate().toISOString().slice(0, 10);
+  return event.date || event.eventDate.toDate().toISOString().slice(0, 10);
 }
