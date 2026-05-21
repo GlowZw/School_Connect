@@ -11,8 +11,11 @@ type AuthStore = {
   schoolId: string | null;
   schoolName: string | null;
   status: AuthStatus;
+  registrationAuthBlocked: boolean;
   setProfile: (profile: AuthProfile | null) => void;
   setStatus: (status: AuthStatus) => void;
+  blockRegistrationAuth: () => void;
+  unblockRegistrationAuth: () => void;
   reset: () => void;
 };
 
@@ -25,6 +28,7 @@ export const useAuthStore = create<AuthStore>()(
       schoolId: null,
       schoolName: null,
       status: 'idle',
+      registrationAuthBlocked: false,
       setProfile: (profile) =>
         set({
           profile,
@@ -35,6 +39,17 @@ export const useAuthStore = create<AuthStore>()(
           status: profile ? 'authenticated' : 'unauthenticated',
         }),
       setStatus: (status) => set({ status }),
+      blockRegistrationAuth: () =>
+        set({
+          registrationAuthBlocked: true,
+          profile: null,
+          user: null,
+          role: null,
+          schoolId: null,
+          schoolName: null,
+          status: 'unauthenticated',
+        }),
+      unblockRegistrationAuth: () => set({ registrationAuthBlocked: false }),
       reset: () =>
         set({
           profile: null,
@@ -43,6 +58,7 @@ export const useAuthStore = create<AuthStore>()(
           schoolId: null,
           schoolName: null,
           status: 'unauthenticated',
+          registrationAuthBlocked: false,
         }),
     }),
     {

@@ -36,6 +36,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
       tenantUnsubscribe?.();
       tenantUnsubscribe = undefined;
 
+      if (useAuthStore.getState().registrationAuthBlocked) {
+        setProfile(null);
+        useTenantStore.getState().resetTenantContext();
+        if (user) {
+          await getFirebaseAuth().signOut();
+        }
+        return;
+      }
+
       if (!user || !user.email) {
         setProfile(null);
         useTenantStore.getState().resetTenantContext();
