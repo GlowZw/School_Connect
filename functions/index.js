@@ -10,6 +10,11 @@ initializeApp();
 const db = getFirestore();
 const messaging = getMessaging();
 
+const SCHOOL_NAME_MIGRATION = {
+  oldName: ['Celebration International', 'College'].join(' '),
+  newName: 'Celebration International School',
+};
+
 const reminderOffsets = {
   '1 day before': 24 * 60 * 60 * 1000,
   'Night before': 12 * 60 * 60 * 1000,
@@ -24,6 +29,50 @@ function assertSchoolMember(request, schoolId) {
   const role = request.auth.token.role;
   if (role !== 'teacher' && role !== 'admin') {
     throw new HttpsError('permission-denied', 'Only teachers and admins can schedule reminders.');
+  }
+}
+
+function assertAdmin(request) {
+  if (!request.auth || request.auth.token.role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Only admins can run this operation.');
+  }
+}
+
+async function commitWhenFull(batchState, operations) {
+  if (batchState.count < 450) {
+    return;
+  }
+
+  await batchState.batch.commit();
+  operations.commits += 1;
+  batchState.batch = db.batch();
+  batchState.count = 0;
+}
+
+async function updateSchoolNameQuery(collectionReference, label, operations) {
+  const snapshot = await collectionReference
+    .where('schoolName', '==', SCHOOL_NAME_MIGRATION.oldName)
+    .get();
+
+  const batchState = {
+    batch: db.batch(),
+    count: 0,
+  };
+
+  for (const documentSnapshot of snapshot.docs) {
+    batchState.batch.update(documentSnapshot.ref, {
+      schoolName: SCHOOL_NAME_MIGRATION.newName,
+      updatedAt: Timestamp.now(),
+    });
+    batchState.count += 1;
+    operations.updated += 1;
+    operations.byCollection[label] = (operations.byCollection[label] || 0) + 1;
+    await commitWhenFull(batchState, operations);
+  }
+
+  if (batchState.count > 0) {
+    await batchState.batch.commit();
+    operations.commits += 1;
   }
 }
 
@@ -247,6 +296,93 @@ exports.scheduleCalendarReminders = onCall(async (request) => {
   await batch.commit();
 
   return { scheduled: true };
+});
+
+exports.migrateSchoolName = onCall(async (request) => {
+  assertAdmin(request);
+
+  const operations = {
+    updated: 0,
+    commits: 0,
+    byCollection: {},
+  };
+
+  await updateSchoolNameQuery(db.collection('user_profiles'), 'user_profiles', operations);
+  await updateSchoolNameQuery(db.collection('schools_directory'), 'schools_directory', operations);
+
+  const schoolsByName = await db
+    .collection('schools_directory')
+    .where('name', '==', SCHOOL_NAME_MIGRATION.oldName)
+    .get();
+
+  if (!schoolsByName.empty) {
+    const batch = db.batch();
+    schoolsByName.docs.forEach((schoolDoc) => {
+      batch.update(schoolDoc.ref, {
+        name: SCHOOL_NAME_MIGRATION.newName,
+      });
+      operations.updated += 1;
+      operations.byCollection.schools_directory_name =
+        (operations.byCollection.schools_directory_name || 0) + 1;
+    });
+    await batch.commit();
+    operations.commits += 1;
+  }
+
+  for (const collectionId of [
+    'students',
+    'teachers',
+    'parents',
+    'attendance',
+    'class_registers',
+    'parent_child_links',
+    'users',
+  ]) {
+    await updateSchoolNameQuery(db.collectionGroup(collectionId), collectionId, operations);
+  }
+
+  const verification = {
+    remainingSchoolNameMatches: 0,
+    remainingDirectoryNameMatches: 0,
+  };
+
+  const verifyUserProfiles = await db
+    .collection('user_profiles')
+    .where('schoolName', '==', SCHOOL_NAME_MIGRATION.oldName)
+    .limit(1)
+    .get();
+  verification.remainingSchoolNameMatches += verifyUserProfiles.size;
+
+  for (const collectionId of [
+    'students',
+    'teachers',
+    'parents',
+    'attendance',
+    'class_registers',
+    'parent_child_links',
+    'users',
+  ]) {
+    const verifySnapshot = await db
+      .collectionGroup(collectionId)
+      .where('schoolName', '==', SCHOOL_NAME_MIGRATION.oldName)
+      .limit(1)
+      .get();
+    verification.remainingSchoolNameMatches += verifySnapshot.size;
+  }
+
+  const verifyDirectory = await db
+    .collection('schools_directory')
+    .where('name', '==', SCHOOL_NAME_MIGRATION.oldName)
+    .limit(1)
+    .get();
+  verification.remainingDirectoryNameMatches = verifyDirectory.size;
+
+  return {
+    oldName: SCHOOL_NAME_MIGRATION.oldName,
+    newName: SCHOOL_NAME_MIGRATION.newName,
+    ...operations,
+    verification,
+  };
 });
 
 exports.deliverCalendarReminders = onSchedule('every 30 minutes', async () => {
