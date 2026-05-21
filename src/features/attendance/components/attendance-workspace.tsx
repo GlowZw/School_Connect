@@ -38,12 +38,14 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
       mode === 'teacher'
         ? listTeacherClasses(schoolId ?? '', profile?.uid ?? '')
         : listClasses(schoolId ?? ''),
+    staleTime: 60_000,
   });
 
   const studentsQuery = useQuery({
     enabled: Boolean(schoolId),
     queryKey: ['students', schoolId],
     queryFn: () => listSchoolStudents(schoolId ?? ''),
+    staleTime: 60_000,
   });
 
   const classes = classesQuery.data ?? [];

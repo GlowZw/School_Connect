@@ -35,12 +35,14 @@ export default function AdminStudentsScreen() {
     enabled: Boolean(schoolId),
     queryKey: ['students', schoolId],
     queryFn: () => listSchoolStudents(schoolId ?? ''),
+    staleTime: 60_000,
   });
 
   const classesQuery = useQuery({
     enabled: Boolean(schoolId),
     queryKey: ['classes', schoolId],
     queryFn: () => listClasses(schoolId ?? ''),
+    staleTime: 60_000,
   });
 
   const selectedClassIds = useMemo(() => new Set(form.classIds), [form.classIds]);

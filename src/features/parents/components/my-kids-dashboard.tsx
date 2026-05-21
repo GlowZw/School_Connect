@@ -39,6 +39,7 @@ export function MyKidsDashboard() {
     enabled: Boolean(schoolId && parentId),
     queryKey: ['parent-students', schoolId, parentId],
     queryFn: () => Promise.resolve([] as StudentProfile[]),
+    staleTime: 60_000,
   });
 
   useEffect(() => {
@@ -48,22 +49,22 @@ export function MyKidsDashboard() {
 
     return subscribeParentStudents(schoolId, parentId, (students) => {
       queryClient.setQueryData(['parent-students', schoolId, parentId], students);
-      if (!selectedStudentId && students[0]) {
-        setSelectedStudentId(students[0].id);
-      }
+      setSelectedStudentId((current) => current ?? students[0]?.id ?? null);
     });
-  }, [parentId, queryClient, schoolId, selectedStudentId]);
+  }, [parentId, queryClient, schoolId]);
 
   const classesQuery = useQuery({
     enabled: Boolean(schoolId),
     queryKey: ['classes', schoolId],
     queryFn: () => listClasses(schoolId ?? ''),
+    staleTime: 60_000,
   });
 
   const searchQuery = useQuery({
     enabled: Boolean(schoolId && studentSearch.trim().length >= 2),
     queryKey: ['student-search', schoolId, studentSearch],
     queryFn: () => searchStudents(schoolId ?? '', studentSearch),
+    staleTime: 30_000,
   });
 
   const linkMutation = useMutation({
