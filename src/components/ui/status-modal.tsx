@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, StyleSheet, Text, View } from 'react-native';
 
 import { AppIcon, type AppIconName } from '@/components/ui/app-icon';
 import { theme } from '@/theme';
@@ -8,23 +8,28 @@ type StatusModalProps = {
   visible: boolean;
   title: string;
   message?: string;
-  buttonLabel?: string;
   iconName: AppIconName;
   iconColor: string;
   onClose: () => void;
+  autoDismissMs?: number;
 };
 
 function StatusModal({
   visible,
   title,
   message,
-  buttonLabel = 'OK',
   iconName,
   iconColor,
   onClose,
+  autoDismissMs = 1500,
 }: StatusModalProps) {
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.96)).current;
+  const closeRef = useRef(onClose);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!visible) {
@@ -46,7 +51,17 @@ function StatusModal({
         tension: 110,
       }),
     ]).start();
-  }, [opacity, scale, visible]);
+
+    const timeout = setTimeout(() => {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => closeRef.current());
+    }, autoDismissMs);
+
+    return () => clearTimeout(timeout);
+  }, [autoDismissMs, opacity, scale, visible]);
 
   return (
     <Modal animationType="none" onRequestClose={onClose} transparent visible={visible}>
@@ -57,9 +72,6 @@ function StatusModal({
           </View>
           <Text style={styles.title}>{title}</Text>
           {message ? <Text style={styles.message}>{message}</Text> : null}
-          <Pressable onPress={onClose} style={({ pressed }) => [styles.button, pressed ? styles.buttonPressed : null]}>
-            <Text style={styles.buttonLabel}>{buttonLabel}</Text>
-          </Pressable>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -68,7 +80,7 @@ function StatusModal({
 
 type PublicStatusModalProps = Pick<
   StatusModalProps,
-  'visible' | 'title' | 'message' | 'buttonLabel' | 'onClose'
+  'visible' | 'title' | 'message' | 'onClose' | 'autoDismissMs'
 >;
 
 export function SuccessModal(props: PublicStatusModalProps) {
@@ -117,20 +129,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',
-  },
-  button: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.sm,
-    minWidth: 120,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  buttonLabel: {
-    color: theme.colors.surface,
-    fontWeight: '800',
   },
 });
