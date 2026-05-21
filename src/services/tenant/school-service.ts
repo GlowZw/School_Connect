@@ -69,7 +69,7 @@ export async function seedDefaultSchools() {
   const defaultSchools: SchoolDirectoryEntry[] = [
     {
       id: 'SCH-001',
-      name: 'Celebration International College',
+      name: 'Celebration International School',
       logoUrl: 'https://images.unsplash.com/photo-1594608661623-aa0bd3a69d28?w=200&auto=format&fit=crop&q=80',
       branding: {
         primaryColor: '#059669', // Emerald
