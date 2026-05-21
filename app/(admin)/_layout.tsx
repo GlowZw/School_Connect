@@ -23,6 +23,7 @@ export default function AdminLayout() {
       accountRole="admin"
       displayName={profile.displayName ?? 'School Connect User'}
       email={profile.email}
+      permissions={profile.permissions}
       role="admin"
     >
       <Slot />

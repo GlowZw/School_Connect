@@ -1,6 +1,7 @@
 import type { AppIconName } from '@/components/ui/app-icon';
 import { theme } from '@/theme';
 import type { UserRole } from '@/types/auth';
+import type { AppPermission } from '@/types/permissions';
 
 export type NavigationItem = {
   label: string;
@@ -8,6 +9,7 @@ export type NavigationItem = {
   iconName: AppIconName;
   accent: string;
   description: string;
+  permissions?: AppPermission[];
 };
 
 export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> = {
@@ -46,6 +48,7 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       iconName: 'dollar-sign',
       accent: theme.colors.success,
       description: 'Track balances, due dates, and payment history.',
+      permissions: ['canViewPayments'],
     },
     {
       label: 'Notifications',
@@ -154,6 +157,7 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       iconName: 'activity',
       accent: theme.colors.accent,
       description: 'Manage sports and culture activity updates.',
+      permissions: ['canManageSports', 'canManageCulture'],
     },
     {
       label: 'Settings',
@@ -212,6 +216,7 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       iconName: 'dollar-sign',
       accent: theme.colors.success,
       description: 'Monitor fee structures, balances, and payment reports.',
+      permissions: ['canManagePayments', 'canViewPayments'],
     },
     {
       label: 'Messages',
@@ -226,6 +231,7 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       iconName: 'activity',
       accent: theme.colors.accent,
       description: 'Manage sports, culture events, and participation.',
+      permissions: ['canManageSports', 'canManageCulture'],
     },
     {
       label: 'Awards',
@@ -233,6 +239,7 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       iconName: 'file-text',
       accent: theme.colors.warning,
       description: 'Issue student recognition and certificate updates.',
+      permissions: ['canPublishAwards'],
     },
     {
       label: 'Lunch Menu',
@@ -240,6 +247,7 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       iconName: 'coffee',
       accent: theme.colors.secondary,
       description: 'Publish weekly menus and dietary notices.',
+      permissions: ['canManageLunch'],
     },
     {
       label: 'Settings',

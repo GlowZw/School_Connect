@@ -1,6 +1,7 @@
 import type { BottomNavKey } from '@/components/layout/bottom-nav-bar';
 import { roleNavigationItems } from '@/constants/navigation';
 import type { UserRole } from '@/types/auth';
+import type { AppPermission } from '@/types/permissions';
 
 export function getHomeRoute(role: UserRole) {
   return role === 'parent' ? '/(parent)' : role === 'teacher' ? '/(teacher)' : '/(admin)';
@@ -55,6 +56,11 @@ export function isNavigationItemActive(pathname: string, href: string) {
   return false;
 }
 
-export function getNavigationItems(role: UserRole | 'shared') {
-  return roleNavigationItems[role];
+export function getNavigationItems(role: UserRole | 'shared', permissions: AppPermission[] = []) {
+  return roleNavigationItems[role].filter(
+    (item) =>
+      !item.permissions ||
+      item.permissions.length === 0 ||
+      item.permissions.some((permission) => permissions.includes(permission)),
+  );
 }

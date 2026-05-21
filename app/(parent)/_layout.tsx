@@ -23,6 +23,7 @@ export default function ParentLayout() {
       accountRole="parent"
       displayName={profile.displayName ?? 'School Connect User'}
       email={profile.email}
+      permissions={profile.permissions}
       role="parent"
     >
       <Slot />

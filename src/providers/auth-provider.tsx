@@ -30,8 +30,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     setStatus('loading');
+    let tenantUnsubscribe: (() => void) | undefined;
 
     const unsubscribe = onAuthStateChanged(getFirebaseAuth(), async (user) => {
+      tenantUnsubscribe?.();
+      tenantUnsubscribe = undefined;
+
       if (!user || !user.email) {
         setProfile(null);
         useTenantStore.getState().resetTenantContext();
@@ -66,13 +70,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
       let logoUrl = null;
 
       if (schoolId && schoolId !== 'pending-school-association') {
-        const { getSchoolDirectoryEntry } = await import('@/services/tenant/school-service');
+        const { getSchoolDirectoryEntry, subscribeSchoolDirectoryEntry } = await import(
+          '@/services/tenant/school-service'
+        );
         const schoolEntry = await getSchoolDirectoryEntry(schoolId);
         if (schoolEntry) {
           schoolName = schoolEntry.name;
           branding = schoolEntry.branding;
           logoUrl = schoolEntry.logoUrl;
         }
+        tenantUnsubscribe = subscribeSchoolDirectoryEntry(schoolId, (nextSchool) => {
+          if (nextSchool) {
+            useTenantStore
+              .getState()
+              .setTenantContext(
+                schoolId,
+                nextSchool.name,
+                nextSchool.branding,
+                nextSchool.logoUrl,
+              );
+          }
+        });
       }
 
       setProfile({
@@ -105,7 +123,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
     });
 
-    return unsubscribe;
+    return () => {
+      tenantUnsubscribe?.();
+      unsubscribe();
+    };
   }, [setProfile, setStatus]);
 
   return children;
