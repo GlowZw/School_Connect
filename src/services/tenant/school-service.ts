@@ -3,6 +3,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -27,14 +31,18 @@ export type SchoolDirectoryEntry = {
 };
 
 export async function getSchoolsDirectory(): Promise<SchoolDirectoryEntry[]> {
-  const snapshot = await getDocs(collection(firestore, 'schools_directory'));
+  const snapshot = await getDocs(
+    query(collection(firestore, 'schools_directory'), orderBy('name', 'asc'), limit(100)),
+  );
   if (snapshot.empty) {
     // If empty, auto-seed and return default list
     await seedDefaultSchools();
-    const refetched = await getDocs(collection(firestore, 'schools_directory'));
-    return refetched.docs.map((item) => item.data() as SchoolDirectoryEntry);
+    const refetched = await getDocs(
+      query(collection(firestore, 'schools_directory'), orderBy('name', 'asc'), limit(100)),
+    );
+    return refetched.docs.map((item) => ({ id: item.id, ...item.data() }) as SchoolDirectoryEntry);
   }
-  return snapshot.docs.map((item) => item.data() as SchoolDirectoryEntry);
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as SchoolDirectoryEntry);
 }
 
 export async function getSchoolDirectoryEntry(schoolId: string): Promise<SchoolDirectoryEntry | null> {
@@ -43,7 +51,16 @@ export async function getSchoolDirectoryEntry(schoolId: string): Promise<SchoolD
   if (!snapshot.exists()) {
     return null;
   }
-  return snapshot.data() as SchoolDirectoryEntry;
+  return { id: snapshot.id, ...snapshot.data() } as SchoolDirectoryEntry;
+}
+
+export function subscribeSchoolDirectoryEntry(
+  schoolId: string,
+  onChange: (school: SchoolDirectoryEntry | null) => void,
+) {
+  return onSnapshot(doc(firestore, 'schools_directory', schoolId), (snapshot) => {
+    onChange(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as SchoolDirectoryEntry) : null);
+  });
 }
 
 export async function seedDefaultSchools() {

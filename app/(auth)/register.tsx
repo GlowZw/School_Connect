@@ -2,7 +2,7 @@ import { Link } from 'expo-router';
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AuthFormShell } from '@/components/auth/auth-form-shell';
 import { SchoolSelector } from '@/components/auth/school-selector';
@@ -77,14 +77,6 @@ export default function RegisterScreen() {
         description="Register with the school identifier assigned during tenant onboarding."
       >
         <View style={{ gap: theme.spacing.md }}>
-          {selectedSchool?.logoUrl ? (
-            <Image
-              source={{ uri: selectedSchool.logoUrl }}
-              style={styles.schoolLogo}
-              resizeMode="contain"
-            />
-          ) : null}
-
           <Controller
             control={control}
             name="fullName"
@@ -119,6 +111,7 @@ export default function RegisterScreen() {
             render={({ field: { value } }) => (
               <SchoolSelector
                 selectedSchoolId={value}
+                selectedSchool={selectedSchool}
                 customPrimaryColor={primaryColor}
                 onSelect={(school) => {
                   setValue('schoolId', school.id, { shouldValidate: true });
@@ -212,11 +205,6 @@ const styles = StyleSheet.create({
   roleCardSelected: {
     borderColor: theme.colors.primary,
     backgroundColor: '#F7F2FF',
-  },
-  schoolLogo: {
-    alignSelf: 'center',
-    height: 72,
-    width: 72,
   },
   roleHeader: {
     flexDirection: 'row',

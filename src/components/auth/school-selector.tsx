@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Modal,
   StyleSheet,
   Text,
@@ -18,6 +19,7 @@ import { theme } from '@/theme';
 
 type SchoolSelectorProps = {
   selectedSchoolId: string;
+  selectedSchool?: SchoolDirectoryEntry | null;
   onSelect: (school: SchoolDirectoryEntry) => void;
   error?: string;
   customPrimaryColor?: string;
@@ -25,6 +27,7 @@ type SchoolSelectorProps = {
 
 export function SchoolSelector({
   selectedSchoolId,
+  selectedSchool: selectedSchoolOverride,
   onSelect,
   error,
   customPrimaryColor = theme.colors.primary,
@@ -55,7 +58,7 @@ export function SchoolSelector({
     }
   }, [modalVisible]);
 
-  const selectedSchool = schools.find((s) => s.id === selectedSchoolId);
+  const selectedSchool = selectedSchoolOverride ?? schools.find((s) => s.id === selectedSchoolId);
 
   const filteredSchools = schools.filter(
     (school) =>
@@ -76,21 +79,23 @@ export function SchoolSelector({
         ]}
       >
         <View style={styles.selectorContent}>
-          <AppIcon
-            color={theme.colors.mutedText}
-            name="map-pin"
-            size={18}
-          />
-          <Text
-            style={[
-              styles.selectorText,
-              selectedSchool ? styles.selectedText : styles.placeholderText,
-            ]}
-          >
-            {selectedSchool
-              ? `${selectedSchool.name} - ${selectedSchool.id}`
-              : 'Select your school...'}
-          </Text>
+          {selectedSchool?.logoUrl ? (
+            <Image source={{ uri: selectedSchool.logoUrl }} style={styles.selectorLogo} />
+          ) : (
+            <AppIcon color={theme.colors.mutedText} name="map-pin" size={18} />
+          )}
+          <View style={styles.selectorCopy}>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.selectorText,
+                selectedSchool ? styles.selectedText : styles.placeholderText,
+              ]}
+            >
+              {selectedSchool ? selectedSchool.name : 'Select your school...'}
+            </Text>
+            {selectedSchool ? <Text style={styles.selectorSchoolId}>{selectedSchool.id}</Text> : null}
+          </View>
         </View>
         <AppIcon color={theme.colors.mutedText} name="chevron-down" size={18} />
       </TouchableOpacity>
@@ -231,10 +236,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flex: 1,
+    minWidth: 0,
+  },
+  selectorLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+  selectorCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   selectorText: {
     fontSize: 15,
-    flex: 1,
+  },
+  selectorSchoolId: {
+    color: theme.colors.mutedText,
+    fontSize: 12,
+    marginTop: 1,
   },
   placeholderText: {
     color: theme.colors.mutedText,
