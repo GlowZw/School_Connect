@@ -39,6 +39,7 @@ export async function register(values: RegisterFormValues) {
     schoolName,
   });
   await sendEmailVerification(credentials.user);
+  await signOut(getFirebaseAuth());
 
   return credentials;
 }

@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
@@ -7,13 +7,16 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AuthFormShell } from '@/components/auth/auth-form-shell';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
+import { SuccessModal } from '@/components/ui/status-modal';
 import { TextField } from '@/components/ui/text-field';
 import { login } from '@/features/auth/auth-service';
 import { type LoginFormValues, loginSchema } from '@/features/auth/validation';
 import { theme } from '@/theme';
 
 export default function LoginScreen() {
+  const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successVisible, setSuccessVisible] = useState(false);
   const {
     control,
     handleSubmit,
@@ -31,6 +34,7 @@ export default function LoginScreen() {
 
     try {
       await login(values);
+      setSuccessVisible(true);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Unable to sign in.');
     }
@@ -83,6 +87,14 @@ export default function LoginScreen() {
           Reset password
         </Link>
       </View>
+      <SuccessModal
+        title="Sign In Successfully"
+        visible={successVisible}
+        onClose={() => {
+          setSuccessVisible(false);
+          router.replace('/');
+        }}
+      />
     </Screen>
   );
 }

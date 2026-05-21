@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
@@ -9,6 +9,7 @@ import { SchoolSelector } from '@/components/auth/school-selector';
 import { Chip } from '@/components/ui/chip';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
+import { SuccessModal } from '@/components/ui/status-modal';
 import { TextField } from '@/components/ui/text-field';
 import { register } from '@/features/auth/auth-service';
 import { type RegisterFormValues, registerSchema } from '@/features/auth/validation';
@@ -39,7 +40,9 @@ const roleOptions: Array<{
 ];
 
 export default function RegisterScreen() {
+  const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successVisible, setSuccessVisible] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState<SchoolDirectoryEntry | null>(null);
 
   const {
@@ -63,6 +66,7 @@ export default function RegisterScreen() {
 
     try {
       await register(values);
+      setSuccessVisible(true);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Unable to register.');
     }
@@ -178,6 +182,14 @@ export default function RegisterScreen() {
         </View>
       </AuthFormShell>
       <Link href="/(auth)/login" style={[styles.backLink, { color: primaryColor }]}>Back to sign in</Link>
+      <SuccessModal
+        title="Account Created Successfully"
+        visible={successVisible}
+        onClose={() => {
+          setSuccessVisible(false);
+          router.replace('/(auth)/login');
+        }}
+      />
     </Screen>
   );
 }
