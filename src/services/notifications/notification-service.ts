@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 import { defaultNotificationPreferences } from '@/constants/permissions';
 import { firestore } from '@/services/firebase/firestore';
@@ -6,8 +6,28 @@ import { schoolCollectionPath } from '@/services/tenant/pathing';
 import { registerForPushNotificationsAsync } from '@/services/firebase/messaging';
 import type { NotificationPreferenceMap } from '@/types/permissions';
 
-export async function registerNotificationToken() {
-  return registerForPushNotificationsAsync();
+export async function registerNotificationToken(
+  schoolId?: string,
+  userId?: string,
+  audiences: string[] = [],
+) {
+  const token = await registerForPushNotificationsAsync();
+
+  if (token && schoolId && userId) {
+    await setDoc(
+      doc(firestore, schoolCollectionPath(schoolId, 'notification_tokens'), userId),
+      {
+        token,
+        userId,
+        schoolId,
+        audiences,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+
+  return token;
 }
 
 export async function getNotificationPreferences(schoolId: string, userId: string) {
