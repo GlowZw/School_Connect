@@ -19,7 +19,8 @@ export default function SharedLayout() {
       accountRole={profile.role}
       displayName={profile.displayName ?? 'School Connect User'}
       email={profile.email}
-      role="shared"
+      permissions={profile.permissions}
+      role={profile.role}
     >
       <Slot />
     </PortalShell>

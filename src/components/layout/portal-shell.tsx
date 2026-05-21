@@ -5,6 +5,7 @@ import {
   Modal,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -23,14 +24,17 @@ import {
 import { AppIcon } from '@/components/ui/app-icon';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { logout } from '@/features/auth/auth-service';
+import { useTenantStore } from '@/store/tenant-store';
 import { theme } from '@/theme';
 import type { UserRole } from '@/types/auth';
+import type { AppPermission } from '@/types/permissions';
 
 type PortalShellProps = PropsWithChildren<{
   role: UserRole | 'shared';
   accountRole: UserRole;
   displayName: string;
   email: string;
+  permissions?: AppPermission[];
 }>;
 
 const roleLabels: Record<PortalShellProps['role'], string> = {
@@ -40,7 +44,14 @@ const roleLabels: Record<PortalShellProps['role'], string> = {
   shared: 'Shared Workspace',
 };
 
-export function PortalShell({ role, accountRole, displayName, email, children }: PortalShellProps) {
+export function PortalShell({
+  role,
+  accountRole,
+  displayName,
+  email,
+  permissions = [],
+  children,
+}: PortalShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
@@ -48,8 +59,11 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isCompact = width < 920;
+  const schoolName = useTenantStore((state) => state.schoolName);
   const initials = useMemo(() => getInitials(displayName || email), [displayName, email]);
-  const navItems = getNavigationItems(role);
+  const navItems = getNavigationItems(role, permissions);
+  const headerTitle = schoolName || 'School Connect';
+  const roleLabel = roleLabels[accountRole];
 
   const handleNavigate = (href: string) => {
     router.replace(href as never);
@@ -124,7 +138,11 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
 
       <View style={styles.navSection}>
         <Text style={styles.navLabel}>Navigation</Text>
-        <View style={styles.navList}>
+        <ScrollView
+          contentContainerStyle={styles.navList}
+          showsVerticalScrollIndicator={false}
+          style={styles.navScroller}
+        >
           {navItems.map((item) => {
             const active = isNavigationItemActive(pathname, item.href);
 
@@ -138,7 +156,7 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
               />
             );
           })}
-        </View>
+        </ScrollView>
       </View>
 
       <Pressable
@@ -160,11 +178,11 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
             <View style={styles.topBarLeading}>
               {isCompact ? (
                 <Pressable onPress={() => setSidebarOpen(true)} style={styles.menuButton}>
-                  <Text style={styles.menuButtonText}>Menu</Text>
+                  <AppIcon color={theme.colors.primary} name="menu" size={18} />
                 </Pressable>
               ) : null}
-              <Text style={styles.topBarTitle}>School Connect</Text>
-              <Text style={styles.topBarSubtitle}>{roleLabels[role]}</Text>
+              <Text style={styles.topBarTitle}>{headerTitle}</Text>
+              <Text style={styles.topBarSubtitle}>({roleLabel})</Text>
             </View>
             <View style={styles.topBarProfile}>
               <View style={styles.topBarAvatar}>
@@ -174,7 +192,7 @@ export function PortalShell({ role, accountRole, displayName, email, children }:
                 <Text numberOfLines={1} style={styles.topBarName}>
                   {displayName}
                 </Text>
-                <Text style={styles.topBarRole}>{roleLabels[role]}</Text>
+                <Text style={styles.topBarRole}>{roleLabel}</Text>
               </View>
             </View>
           </View>
@@ -343,6 +361,7 @@ const styles = StyleSheet.create({
   navSection: {
     gap: theme.spacing.sm,
     flex: 1,
+    minHeight: 0,
   },
   navLabel: {
     color: theme.colors.sidebarMuted,
@@ -353,6 +372,10 @@ const styles = StyleSheet.create({
   },
   navList: {
     gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
+  },
+  navScroller: {
+    flex: 1,
   },
   navItem: {
     flexDirection: 'row',
@@ -379,6 +402,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.sm,
     paddingVertical: 14,
     alignItems: 'center',
+    marginTop: 'auto',
   },
   logoutButtonDisabled: {
     opacity: 0.7,
@@ -410,25 +434,20 @@ const styles = StyleSheet.create({
   },
   topBarLeading: {
     gap: theme.spacing.xs,
+    flex: 1,
+    minWidth: 0,
   },
   menuButton: {
     alignSelf: 'flex-start',
     backgroundColor: '#F1EAFF',
     borderRadius: theme.radius.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  menuButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    padding: 9,
   },
   topBarTitle: {
     color: theme.colors.text,
     fontSize: 20,
     fontWeight: '700',
+    flexShrink: 1,
   },
   topBarSubtitle: {
     color: theme.colors.mutedText,
