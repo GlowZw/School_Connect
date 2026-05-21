@@ -1,7 +1,7 @@
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 import { firestore } from '@/services/firebase/firestore';
-import { schoolCollectionPath } from '@/services/tenant/pathing';
+import { assertTenantSchoolId, schoolCollectionPath } from '@/services/tenant/pathing';
 
 export type ExcelStudentRecord = {
   studentId: string;
@@ -22,6 +22,7 @@ export type StudentImportResult = {
 const MAX_BATCH_WRITES = 450;
 
 export async function findExistingStudentIds(schoolId: string, studentIds: string[]) {
+  const tenantSchoolId = assertTenantSchoolId(schoolId);
   const uniqueIds = Array.from(new Set(studentIds.filter(Boolean)));
   const existingIds = new Set<string>();
 
@@ -29,7 +30,7 @@ export async function findExistingStudentIds(schoolId: string, studentIds: strin
     const chunk = uniqueIds.slice(index, index + 25);
     const snapshots = await Promise.all(
       chunk.map((studentId) =>
-        getDoc(doc(firestore, schoolCollectionPath(schoolId, 'students'), studentId)),
+        getDoc(doc(firestore, schoolCollectionPath(tenantSchoolId, 'students'), studentId)),
       ),
     );
 
@@ -51,11 +52,12 @@ export async function batchUploadStudents(
     onProgress?: (percentage: number) => void;
   },
 ): Promise<StudentImportResult> {
+  const tenantSchoolId = assertTenantSchoolId(schoolId);
   const overwrite = options?.overwrite ?? false;
   const existingIds = overwrite
     ? new Set<string>()
     : await findExistingStudentIds(
-        schoolId,
+        tenantSchoolId,
         students.map((student) => student.studentId),
       );
   const importableStudents = students.filter((student) => !existingIds.has(student.studentId));
@@ -71,7 +73,11 @@ export async function batchUploadStudents(
 
     chunk.forEach((student) => {
       const fullName = `${student.firstName} ${student.lastName}`.trim();
-      const reference = doc(firestore, schoolCollectionPath(schoolId, 'students'), student.studentId);
+      const reference = doc(
+        firestore,
+        schoolCollectionPath(tenantSchoolId, 'students'),
+        student.studentId,
+      );
 
       batch.set(
         reference,
@@ -84,7 +90,7 @@ export async function batchUploadStudents(
           className: student.class,
           gender: student.gender,
           dob: student.dob,
-          schoolId,
+          schoolId: tenantSchoolId,
           updatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),
         },
