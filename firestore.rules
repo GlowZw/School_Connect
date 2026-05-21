@@ -17,7 +17,8 @@ service cloud.firestore {
     }
 
     function isSchoolMember(schoolId) {
-      return hasTenantContext() && tokenSchoolId() == schoolId;
+      return (hasTenantContext() && tokenSchoolId() == schoolId)
+        || (isSignedIn() && get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data.schoolId == schoolId);
     }
 
     function hasRole(role) {
@@ -101,9 +102,27 @@ service cloud.firestore {
         allow write: if request.auth.uid == userId || isAdmin();
       }
 
+      match /notification_tokens/{userId} {
+        allow read: if request.auth.uid == userId || isAdmin();
+        allow write: if request.auth.uid == userId
+          && request.resource.data.schoolId == schoolId
+          && request.resource.data.userId == request.auth.uid;
+      }
+
       match /calendar_events/{eventId} {
         allow read: if isSchoolMember(schoolId);
         allow write: if isAdmin() || isTeacher();
+      }
+
+      match /calendar/{eventId} {
+        allow read: if isSchoolMember(schoolId);
+        allow create: if (isAdmin() || isTeacher())
+          && request.resource.data.schoolId == schoolId
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if (isAdmin() || isTeacher())
+          && resource.data.schoolId == schoolId
+          && request.resource.data.schoolId == schoolId;
+        allow delete: if isAdmin() || isTeacher();
       }
 
       match /conversations/{conversationId} {
@@ -199,6 +218,31 @@ service cloud.firestore {
         allow read: if isSchoolMember(schoolId);
         allow write: if isAdmin() || hasPermission('canManageLunch');
       }
+
+      match /attendance/{attendanceId} {
+        allow read: if isAdmin()
+          || isTeacher()
+          || (isParent() && parentOwnsStudent(resource.data.studentId));
+        allow create, update: if isAdmin() || isTeacher();
+        allow delete: if isAdmin();
+      }
+
+      match /class_registers/{registerId} {
+        allow read: if isSchoolMember(schoolId);
+        allow write: if isAdmin() || isTeacher();
+      }
+    }
+
+    match /user_profiles/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    match /schools_directory/{schoolId} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

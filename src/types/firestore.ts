@@ -7,7 +7,10 @@ export type SchoolCollection =
   | 'timetables'
   | 'fee_records'
   | 'notifications'
+  | 'calendar'
   | 'calendar_events'
+  | 'attendance'
+  | 'class_registers'
   | 'conversations'
   | 'payments'
   | 'payment_transactions'
@@ -21,6 +24,7 @@ export type SchoolCollection =
   | 'student_recognition'
   | 'lunch_menus'
   | 'daily_meals'
-  | 'notification_preferences';
+  | 'notification_preferences'
+  | 'notification_tokens';
 
 export type TenantScopedPath = `schools/${string}/${SchoolCollection}`;
