@@ -5,3 +5,7 @@ export const roleHomeRoutes: Record<UserRole, `/(parent)` | `/(teacher)` | `/(ad
   teacher: '/(teacher)',
   admin: '/(admin)',
 };
+
+export function getRoleHomeRoute(role: UserRole) {
+  return roleHomeRoutes[role];
+}

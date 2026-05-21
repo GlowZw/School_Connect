@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 
-import { roleHomeRoutes } from '@/constants/routes';
+import { getRoleHomeRoute } from '@/constants/routes';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function Index() {
@@ -8,7 +8,7 @@ export default function Index() {
   const status = useAuthStore((state) => state.status);
 
   if (status === 'authenticated' && profile) {
-    return <Redirect href={roleHomeRoutes[profile.role]} />;
+    return <Redirect href={getRoleHomeRoute(profile.role)} />;
   }
 
   return <Redirect href="/(auth)/login" />;

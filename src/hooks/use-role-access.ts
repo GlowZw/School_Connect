@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { roleHomeRoutes } from '@/constants/routes';
+import { getRoleHomeRoute, roleHomeRoutes } from '@/constants/routes';
 import { useAuthStore } from '@/store/auth-store';
 import type { UserRole } from '@/types/auth';
 
@@ -12,7 +12,7 @@ export function useRoleAccess(expectedRole?: UserRole) {
 
   return useMemo(() => {
     const isAuthenticated = status === 'authenticated' && !!profile;
-    const roleHome: RoleHomeRoute = profile ? roleHomeRoutes[profile.role] : '/(auth)/login';
+    const roleHome: RoleHomeRoute = profile ? getRoleHomeRoute(profile.role) : '/(auth)/login';
     const roleMatches = expectedRole ? profile?.role === expectedRole : true;
 
     return {
