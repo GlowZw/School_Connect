@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "288737181881",
+    "project_id": "school-connect-58f95",
+    "storage_bucket": "school-connect-58f95.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:288737181881:android:7fb29ed9269f514ded5b68",
+        "android_client_info": {
+          "package_name": "com.glow.schoolconnect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLeFcC6Qw8iO1NuOGKyF5_UlwHsZMJiro"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
