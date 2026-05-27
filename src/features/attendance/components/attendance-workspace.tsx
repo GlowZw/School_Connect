@@ -5,30 +5,39 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppIcon } from '@/components/ui/app-icon';
 import { Card } from '@/components/ui/card';
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { SuccessModal } from '@/components/ui/status-modal';
 import {
   attendanceQueryKey,
   useAttendanceRecords,
 } from '@/features/attendance/use-attendance-records';
 import { getAttendancePercentage, markAttendance } from '@/features/attendance/service';
-import { listClasses, listSchoolStudents, listTeacherClasses } from '@/features/students/service';
+import {
+  listClasses,
+  listSchoolStudents,
+  listStudentsByClassIds,
+  listTeacherClasses,
+} from '@/features/students/service';
 import { useAuthStore } from '@/store/auth-store';
 import { theme } from '@/theme';
 import type { AttendanceStatus } from '@/types/attendance';
 
 type AttendanceWorkspaceProps = {
   mode: 'teacher' | 'admin';
+  initialClassId?: string;
 };
 
-const statuses: AttendanceStatus[] = ['present', 'absent', 'late'];
+const statuses: AttendanceStatus[] = ['present', 'absent'];
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
+export function AttendanceWorkspace({ initialClassId, mode }: AttendanceWorkspaceProps) {
   const profile = useAuthStore((state) => state.profile);
   const schoolId = profile?.schoolId;
-  const [selectedClassId, setSelectedClassId] = useState<string | undefined>();
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(initialClassId);
+  const [draftStatuses, setDraftStatuses] = useState<Record<string, AttendanceStatus>>({});
+  const [successVisible, setSuccessVisible] = useState(false);
   const queryClient = useQueryClient();
 
   const classesQuery = useQuery({
@@ -41,14 +50,25 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
     staleTime: 60_000,
   });
 
+  const classes = classesQuery.data ?? [];
+  const teacherClassIds = useMemo(
+    () => (mode === 'teacher' ? classes.map((schoolClass) => schoolClass.id) : []),
+    [classes, mode],
+  );
+
   const studentsQuery = useQuery({
-    enabled: Boolean(schoolId),
-    queryKey: ['students', schoolId],
-    queryFn: () => listSchoolStudents(schoolId ?? ''),
+    enabled: Boolean(schoolId && (mode === 'admin' || teacherClassIds.length > 0)),
+    queryKey:
+      mode === 'teacher'
+        ? ['teacher-students', schoolId, profile?.uid, teacherClassIds]
+        : ['students', schoolId],
+    queryFn: () =>
+      mode === 'teacher'
+        ? listStudentsByClassIds(schoolId ?? '', teacherClassIds)
+        : listSchoolStudents(schoolId ?? ''),
     staleTime: 60_000,
   });
 
-  const classes = classesQuery.data ?? [];
   useEffect(() => {
     if (mode === 'teacher' && !selectedClassId && classes[0]) {
       setSelectedClassId(classes[0].id);
@@ -67,26 +87,38 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
   const attendanceQuery = useAttendanceRecords(schoolId, { classId: selectedClassId });
   const records = attendanceQuery.data ?? [];
 
-  const markMutation = useMutation({
-    mutationFn: ({
-      studentId,
-      status,
-    }: {
-      studentId: string;
-      status: AttendanceStatus;
-    }) =>
-      markAttendance({
-        schoolId: schoolId ?? '',
-        classId: selectedClassId ?? students.find((student) => student.id === studentId)?.classIds[0] ?? 'unassigned',
-        studentId,
-        status,
-        markedBy: profile?.uid ?? '',
-        date: todayKey(),
-      }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
+  const submitMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedClassId) {
+        throw new Error('Select a class before submitting attendance.');
+      }
+
+      const entries = students.map((student) => ({
+        studentId: student.id,
+        status: draftStatuses[student.id] ?? 'absent',
+      }));
+
+      await Promise.all(
+        entries.map((entry) =>
+          markAttendance({
+            schoolId: schoolId ?? '',
+            classId: selectedClassId,
+            studentId: entry.studentId,
+            status: entry.status,
+            teacherId: profile?.uid,
+            markedBy: profile?.uid ?? '',
+            date: todayKey(),
+          }),
+        ),
+      );
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
         queryKey: attendanceQueryKey(schoolId, { classId: selectedClassId }),
-      }),
+      });
+      setDraftStatuses({});
+      setSuccessVisible(true);
+    },
   });
 
   const analytics = useMemo(() => {
@@ -98,6 +130,8 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
       attendance: getAttendancePercentage(records),
     };
   }, [records]);
+  const canSubmit =
+    students.length > 0 && students.every((student) => Boolean(draftStatuses[student.id]));
 
   return (
     <View style={styles.container}>
@@ -112,13 +146,18 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
             onPress={() => setSelectedClassId(undefined)}
             style={[styles.classChip, !selectedClassId ? styles.classChipActive : null]}
           >
-            <Text style={!selectedClassId ? styles.classChipTextActive : styles.classChipText}>All</Text>
+            <Text style={!selectedClassId ? styles.classChipTextActive : styles.classChipText}>
+              All
+            </Text>
           </Pressable>
         ) : null}
         {classes.map((schoolClass) => (
           <Pressable
             key={schoolClass.id}
-            onPress={() => setSelectedClassId(schoolClass.id)}
+            onPress={() => {
+              setSelectedClassId(schoolClass.id);
+              setDraftStatuses({});
+            }}
             style={[
               styles.classChip,
               selectedClassId === schoolClass.id ? styles.classChipActive : null,
@@ -157,6 +196,9 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
       ) : (
         students.map((student) => {
           const latest = records.find((record) => record.studentId === student.id);
+          const studentClass = classes.find((schoolClass) =>
+            student.classIds.includes(schoolClass.id),
+          );
 
           return (
             <Card key={student.id}>
@@ -167,19 +209,27 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
                 <View style={styles.studentText}>
                   <Text style={styles.studentName}>{student.fullName}</Text>
                   <Text style={styles.studentMeta}>
-                    {student.className ?? (student.classIds.join(', ') || 'No class assigned')}
+                    {student.className ?? studentClass?.name ?? 'No class assigned'}
                   </Text>
                 </View>
-                <Text style={styles.statusText}>{latest?.status ?? 'unmarked'}</Text>
+                <Text style={styles.statusText}>
+                  {draftStatuses[student.id] ?? latest?.status ?? 'unmarked'}
+                </Text>
               </View>
               <View style={styles.statusGrid}>
                 {statuses.map((status) => (
                   <PrimaryButton
                     key={status}
-                    disabled={markMutation.isPending}
-                    label={status}
-                    onPress={() => markMutation.mutate({ studentId: student.id, status })}
-                    style={status === latest?.status ? styles.activeStatusButton : styles.statusButton}
+                    disabled={submitMutation.isPending}
+                    label={status === 'present' ? 'Present' : 'Absent'}
+                    onPress={() =>
+                      setDraftStatuses((current) => ({ ...current, [student.id]: status }))
+                    }
+                    style={
+                      status === (draftStatuses[student.id] ?? latest?.status)
+                        ? styles.activeStatusButton
+                        : styles.statusButton
+                    }
                   />
                 ))}
               </View>
@@ -187,6 +237,22 @@ export function AttendanceWorkspace({ mode }: AttendanceWorkspaceProps) {
           );
         })
       )}
+
+      {mode === 'teacher' && students.length > 0 ? (
+        <PrimaryButton
+          disabled={!canSubmit || submitMutation.isPending}
+          label="Submit Attendance"
+          loading={submitMutation.isPending}
+          onPress={() => submitMutation.mutate()}
+        />
+      ) : null}
+
+      <SuccessModal
+        message="Attendance records have been saved."
+        onClose={() => setSuccessVisible(false)}
+        title="Creation Successful"
+        visible={successVisible}
+      />
     </View>
   );
 }

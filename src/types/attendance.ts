@@ -8,6 +8,7 @@ export type AttendanceRecord = {
   classId: string;
   studentId: string;
   status: AttendanceStatus;
+  teacherId?: string;
   markedBy: string;
   date: string;
   createdAt?: Timestamp;

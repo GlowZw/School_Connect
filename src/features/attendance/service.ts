@@ -32,6 +32,7 @@ function mapAttendanceRecord(id: string, data: Record<string, unknown>): Attenda
     classId: String(data.classId),
     studentId: String(data.studentId),
     status: data.status as AttendanceRecord['status'],
+    teacherId: typeof data.teacherId === 'string' ? data.teacherId : undefined,
     markedBy: String(data.markedBy ?? ''),
     date: String(data.date ?? ''),
     createdAt: data.createdAt as AttendanceRecord['createdAt'],
@@ -46,9 +47,17 @@ export async function listAttendanceRecords(
   const constraints = [orderBy('date', 'desc'), limit(PAGE_SIZE)];
 
   const scopedQuery = options.studentId
-    ? query(attendanceCollection(schoolId), where('studentId', '==', options.studentId), ...constraints)
+    ? query(
+        attendanceCollection(schoolId),
+        where('studentId', '==', options.studentId),
+        ...constraints,
+      )
     : options.classId
-      ? query(attendanceCollection(schoolId), where('classId', '==', options.classId), ...constraints)
+      ? query(
+          attendanceCollection(schoolId),
+          where('classId', '==', options.classId),
+          ...constraints,
+        )
       : query(attendanceCollection(schoolId), ...constraints);
 
   const snapshot = await getDocs(scopedQuery);
@@ -64,9 +73,17 @@ export function subscribeAttendanceRecords(
 ) {
   const constraints = [orderBy('date', 'desc'), limit(PAGE_SIZE)];
   const scopedQuery = options.studentId
-    ? query(attendanceCollection(schoolId), where('studentId', '==', options.studentId), ...constraints)
+    ? query(
+        attendanceCollection(schoolId),
+        where('studentId', '==', options.studentId),
+        ...constraints,
+      )
     : options.classId
-      ? query(attendanceCollection(schoolId), where('classId', '==', options.classId), ...constraints)
+      ? query(
+          attendanceCollection(schoolId),
+          where('classId', '==', options.classId),
+          ...constraints,
+        )
       : query(attendanceCollection(schoolId), ...constraints);
 
   return onSnapshot(
