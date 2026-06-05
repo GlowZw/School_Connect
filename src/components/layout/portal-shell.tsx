@@ -66,7 +66,9 @@ export function PortalShell({
   const roleLabel = roleLabels[accountRole];
 
   const handleNavigate = (href: string) => {
-    router.replace(href as never);
+    if (pathname !== href) {
+      router.push(href as never);
+    }
     if (isCompact) {
       setSidebarOpen(false);
     }
@@ -86,6 +88,10 @@ export function PortalShell({
     }
 
     if (key === 'notifications') {
+      if (accountRole === 'teacher') {
+        handleNavigate(getHomeRoute(accountRole));
+        return;
+      }
       handleNavigate('/shared/notifications');
       return;
     }
@@ -198,7 +204,11 @@ export function PortalShell({
           </View>
 
           <View style={styles.content}>{children}</View>
-          <BottomNavBar activeKey={activeBottomKey} onPress={handleBottomNavPress} />
+          <BottomNavBar
+            activeKey={activeBottomKey}
+            hiddenKeys={accountRole === 'teacher' ? ['notifications'] : undefined}
+            onPress={handleBottomNavPress}
+          />
         </View>
       </View>
 

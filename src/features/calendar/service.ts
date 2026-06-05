@@ -5,7 +5,6 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  limit,
   onSnapshot,
   orderBy,
   query,
@@ -20,20 +19,30 @@ import type { CalendarEvent, CalendarEventInput } from '@/types/calendar';
 
 import { httpsCallable } from 'firebase/functions';
 
-const PAGE_SIZE = 50;
-
 function calendarCollection(schoolId: string) {
   return collection(firestore, schoolCollectionPath(schoolId, 'calendar'));
+}
+
+export function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function getCalendarDateTime(date: string, time: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour = 0, minute = 0] = time.split(':').map(Number);
+
+  return new Date(year, month - 1, day, hour, minute, 0, 0);
 }
 
 function mapCalendarEvent(id: string, data: Record<string, unknown>): CalendarEvent {
   const eventDate = data.eventDate as CalendarEvent['eventDate'];
   const fallbackDate = eventDate?.toDate ? eventDate.toDate() : new Date();
-  const date = typeof data.date === 'string' ? data.date : fallbackDate.toISOString().slice(0, 10);
-  const time =
-    typeof data.time === 'string'
-      ? data.time
-      : fallbackDate.toTimeString().slice(0, 5);
+  const date = typeof data.date === 'string' ? data.date : formatLocalDate(fallbackDate);
+  const time = typeof data.time === 'string' ? data.time : fallbackDate.toTimeString().slice(0, 5);
 
   return {
     id,
@@ -63,7 +72,7 @@ function mapCalendarEvent(id: string, data: Record<string, unknown>): CalendarEv
 }
 
 export async function listCalendarEvents(schoolId: string): Promise<CalendarEvent[]> {
-  const eventQuery = query(calendarCollection(schoolId), orderBy('eventDate', 'asc'), limit(PAGE_SIZE));
+  const eventQuery = query(calendarCollection(schoolId), orderBy('eventDate', 'asc'));
   const snapshot = await getDocs(eventQuery);
 
   return snapshot.docs.map((item) => mapCalendarEvent(item.id, item.data()));
@@ -74,7 +83,7 @@ export function subscribeCalendarEvents(
   onChange: (events: CalendarEvent[]) => void,
   onError?: (error: Error) => void,
 ) {
-  const eventQuery = query(calendarCollection(schoolId), orderBy('eventDate', 'asc'), limit(PAGE_SIZE));
+  const eventQuery = query(calendarCollection(schoolId), orderBy('eventDate', 'asc'));
 
   return onSnapshot(
     eventQuery,
@@ -94,7 +103,7 @@ export async function createCalendarEvent(
     ...input,
     schoolId,
     createdBy,
-    eventDate: Timestamp.fromDate(new Date(`${input.date}T${input.time}:00`)),
+    eventDate: Timestamp.fromDate(getCalendarDateTime(input.date, input.time)),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -113,15 +122,16 @@ export async function updateCalendarEvent(
     ...input,
     ...(input.date && input.time
       ? {
-          eventDate: Timestamp.fromDate(
-            new Date(`${input.date}T${input.time}:00`),
-          ),
+          eventDate: Timestamp.fromDate(getCalendarDateTime(input.date, input.time)),
         }
       : {}),
     updatedAt: serverTimestamp(),
   };
 
-  await updateDoc(doc(firestore, schoolCollectionPath(schoolId, 'calendar'), eventId), updatePayload);
+  await updateDoc(
+    doc(firestore, schoolCollectionPath(schoolId, 'calendar'), eventId),
+    updatePayload,
+  );
   await scheduleCalendarReminders(schoolId, eventId).catch(() => undefined);
 }
 
@@ -135,5 +145,5 @@ export async function scheduleCalendarReminders(schoolId: string, eventId: strin
 }
 
 export function getCalendarEventDateKey(event: CalendarEvent) {
-  return event.date || event.eventDate.toDate().toISOString().slice(0, 10);
+  return event.date || formatLocalDate(event.eventDate.toDate());
 }

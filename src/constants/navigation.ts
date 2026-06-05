@@ -43,14 +43,6 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       description: 'Browse school events, reminders, and term dates.',
     },
     {
-      label: 'Fees',
-      href: '/(parent)/payments',
-      iconName: 'dollar-sign',
-      accent: theme.colors.success,
-      description: 'Track balances, due dates, and payment history.',
-      permissions: ['canViewPayments'],
-    },
-    {
       label: 'Notifications',
       href: '/shared/notifications',
       iconName: 'bell',
@@ -63,6 +55,14 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       iconName: 'message-square',
       accent: theme.colors.primary,
       description: 'Open direct chats, group threads, and announcements.',
+    },
+    {
+      label: 'Fees',
+      href: '/(parent)/payments',
+      iconName: 'dollar-sign',
+      accent: theme.colors.success,
+      description: 'Track balances, due dates, and payment history.',
+      permissions: ['canViewPayments'],
     },
     {
       label: 'Activities',
@@ -109,6 +109,13 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       description: 'Access assigned classes and class-level workflows.',
     },
     {
+      label: 'Students',
+      href: '/(teacher)/students',
+      iconName: 'users',
+      accent: theme.colors.accent,
+      description: 'View students in assigned classes and open basic profiles.',
+    },
+    {
       label: 'Attendance',
       href: '/(teacher)/attendance',
       iconName: 'check-square',
@@ -131,25 +138,11 @@ export const roleNavigationItems: Record<UserRole | 'shared', NavigationItem[]> 
       description: 'Publish class and school announcements.',
     },
     {
-      label: 'Students',
-      href: '/(teacher)/students',
-      iconName: 'users',
-      accent: theme.colors.accent,
-      description: 'Access class lists and student-related records.',
-    },
-    {
       label: 'Assignments',
       href: '/(teacher)/assignments',
       iconName: 'file-text',
       accent: theme.colors.warning,
       description: 'Manage assignments and deadline visibility.',
-    },
-    {
-      label: 'Notifications',
-      href: '/shared/notifications',
-      iconName: 'bell',
-      accent: theme.colors.warning,
-      description: 'Review reminders and school alerts.',
     },
     {
       label: 'Sports & Culture',

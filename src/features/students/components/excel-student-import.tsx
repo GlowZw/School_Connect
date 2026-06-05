@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppIcon } from '@/components/ui/app-icon';
 import { Card } from '@/components/ui/card';
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { SuccessModal } from '@/components/ui/status-modal';
 import {
   batchUploadStudents,
   findExistingStudentIds,
@@ -28,11 +29,59 @@ type PreviewRow = ExcelStudentRecord & {
   duplicateInFirestore: boolean;
 };
 
-const requiredColumns = ['studentId', 'firstName', 'lastName', 'class', 'gender', 'dob'] as const;
+type ColumnMapping = Record<SupportedColumn, string>;
+
+const supportedColumns = [
+  'studentName',
+  'surname',
+  'grade',
+  'dob',
+  'parentName',
+  'parentEmail',
+  'parentPhone',
+  'studentNumber',
+] as const;
+
+type SupportedColumn = (typeof supportedColumns)[number];
+
+const columnLabels: Record<SupportedColumn, string> = {
+  studentName: 'Student Name',
+  surname: 'Surname',
+  grade: 'Grade',
+  dob: 'DOB',
+  parentName: 'Parent',
+  parentEmail: 'Email',
+  parentPhone: 'Phone',
+  studentNumber: 'Student Number',
+};
+
+const headerAliases: Record<SupportedColumn, string[]> = {
+  studentName: ['student name', 'first name', 'firstname', 'name', 'student'],
+  surname: ['surname', 'last name', 'lastname', 'family name'],
+  grade: ['grade', 'grade year', 'year'],
+  dob: ['dob', 'date of birth', 'birth date', 'dateofbirth'],
+  parentName: ['parent', 'parent name', 'guardian', 'guardian name'],
+  parentEmail: ['email', 'parent email', 'guardian email'],
+  parentPhone: ['phone', 'parent phone', 'mobile', 'cell'],
+  studentNumber: ['student number', 'student no', 'student id', 'studentid', 'student_id'],
+};
+
+function detectMapping(headers: string[]) {
+  return supportedColumns.reduce<ColumnMapping>((mapping, column) => {
+    const match = headers.find((header) => headerAliases[column].includes(normalizeHeader(header)));
+    mapping[column] = match ?? '';
+    return mapping;
+  }, {} as ColumnMapping);
+}
 
 function getValue(row: Record<string, unknown>, keys: string[]) {
+  const normalizedEntries = Object.entries(row).map(
+    ([key, value]) => [normalizeHeader(key), value] as const,
+  );
   for (const key of keys) {
-    const value = row[key];
+    const normalizedKey = normalizeHeader(key);
+    const value =
+      row[key] ?? normalizedEntries.find(([entryKey]) => entryKey === normalizedKey)?.[1];
     if (value !== undefined && value !== null && String(value).trim()) {
       return String(value).trim();
     }
@@ -41,36 +90,92 @@ function getValue(row: Record<string, unknown>, keys: string[]) {
   return '';
 }
 
-function normalizeRow(row: Record<string, unknown>, schoolId: string, rowNumber: number): PreviewRow {
-  const studentId = getValue(row, ['studentId', 'Student ID', 'StudentId', 'student_id']);
-  const firstName = getValue(row, ['firstName', 'First Name', 'firstname', 'first_name']);
-  const lastName = getValue(row, ['lastName', 'Last Name', 'lastname', 'last_name']);
-  const className = getValue(row, ['class', 'Class', 'className', 'Class Name']);
-  const gender = getValue(row, ['gender', 'Gender']);
-  const dob = getValue(row, ['dob', 'DOB', 'Date of Birth', 'dateOfBirth']);
-  const errors = requiredColumns
-    .filter((column) => {
-      const valueByColumn = {
-        studentId,
-        firstName,
-        lastName,
-        class: className,
-        gender,
-        dob,
-      }[column];
+function normalizeHeader(value: string) {
+  return value.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+}
 
-      return !valueByColumn;
-    })
-    .map((column) => `${column} is required`);
+function normalizeDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (!match) {
+    return trimmed;
+  }
+
+  const [, day, month, rawYear] = match;
+  const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+
+  return Number.isNaN(date.getTime()) ? trimmed : date.toISOString().slice(0, 10);
+}
+
+function splitName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return { firstName: parts[0] ?? '', surname: '' };
+  }
+
+  return {
+    firstName: parts.slice(0, -1).join(' '),
+    surname: parts[parts.length - 1],
+  };
+}
+
+function applyColumnMapping(row: Record<string, unknown>, mapping: ColumnMapping) {
+  return supportedColumns.reduce<Record<string, unknown>>((mappedRow, column) => {
+    const sourceHeader = mapping[column];
+    mappedRow[columnLabels[column]] = sourceHeader ? row[sourceHeader] : '';
+    return mappedRow;
+  }, {});
+}
+
+function normalizeRow(
+  row: Record<string, unknown>,
+  schoolId: string,
+  rowNumber: number,
+  mapping?: ColumnMapping,
+): PreviewRow {
+  const sourceRow = mapping ? applyColumnMapping(row, mapping) : row;
+  const studentNumber = getValue(sourceRow, headerAliases.studentNumber);
+  const rawStudentName = getValue(sourceRow, headerAliases.studentName);
+  const explicitSurname = getValue(sourceRow, headerAliases.surname);
+  const split = splitName(rawStudentName);
+  const firstName = split.firstName;
+  const surname = explicitSurname || split.surname;
+  const grade = getValue(sourceRow, headerAliases.grade);
+  const dob = normalizeDate(getValue(sourceRow, headerAliases.dob));
+  const parentName = getValue(sourceRow, headerAliases.parentName);
+  const parentEmail = getValue(sourceRow, headerAliases.parentEmail);
+  const parentPhone = getValue(sourceRow, headerAliases.parentPhone);
+  const studentId =
+    studentNumber || `${firstName}-${surname}-${dob}`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const errors = [
+    !firstName ? 'Student Name is required' : '',
+    !surname ? 'Surname is required' : '',
+    !grade ? 'Grade is required' : '',
+    !dob ? 'DOB is required' : '',
+    dob && Number.isNaN(new Date(dob).getTime()) ? 'DOB is invalid' : '',
+  ].filter(Boolean);
 
   return {
     rowNumber,
     studentId,
+    studentNumber,
     firstName,
-    lastName,
-    class: className,
-    gender,
+    surname,
+    grade,
     dob,
+    parentName,
+    parentEmail,
+    parentPhone,
     schoolId,
     errors,
     duplicateInFile: false,
@@ -78,23 +183,13 @@ function normalizeRow(row: Record<string, unknown>, schoolId: string, rowNumber:
   };
 }
 
-async function parseWorkbook(uri: string, schoolId: string) {
-  const response = await fetch(uri);
-  const data = await response.arrayBuffer();
-  const workbook = read(data, { type: 'array', cellDates: true });
-  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-
-  if (!firstSheet) {
-    throw new Error('The workbook does not contain any sheets.');
-  }
-
-  const rows = utils.sheet_to_json<Record<string, unknown>>(firstSheet, {
-    defval: '',
-    raw: false,
-  });
-
+async function buildPreviewRows(
+  rows: Array<Record<string, unknown>>,
+  schoolId: string,
+  mapping: ColumnMapping,
+) {
   const seen = new Map<string, number>();
-  const normalizedRows = rows.map((row, index) => normalizeRow(row, schoolId, index + 2));
+  const normalizedRows = rows.map((row, index) => normalizeRow(row, schoolId, index + 2, mapping));
 
   normalizedRows.forEach((row) => {
     if (!row.studentId) {
@@ -121,14 +216,41 @@ async function parseWorkbook(uri: string, schoolId: string) {
   }));
 }
 
+async function parseWorkbook(uri: string, schoolId: string) {
+  const response = await fetch(uri);
+  const data = await response.arrayBuffer();
+  const workbook = read(data, { type: 'array', cellDates: true });
+  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+
+  if (!firstSheet) {
+    throw new Error('The workbook does not contain any sheets.');
+  }
+
+  const rows = utils
+    .sheet_to_json<Record<string, unknown>>(firstSheet, {
+      defval: '',
+      raw: false,
+    })
+    .filter((row) => Object.values(row).some((value) => String(value).trim()));
+  const headers = rows[0] ? Object.keys(rows[0]) : [];
+  const mapping = detectMapping(headers);
+  const previewRows = await buildPreviewRows(rows, schoolId, mapping);
+
+  return { headers, mapping, previewRows, rows };
+}
+
 export function ExcelStudentImport({ schoolId, role }: ExcelStudentImportProps) {
   const queryClient = useQueryClient();
   const [fileName, setFileName] = useState<string | null>(null);
   const [rows, setRows] = useState<PreviewRow[]>([]);
+  const [rawRows, setRawRows] = useState<Array<Record<string, unknown>>>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<StudentImportResult | null>(null);
+  const [successVisible, setSuccessVisible] = useState(false);
 
   const validRows = useMemo(
     () =>
@@ -151,6 +273,7 @@ export function ExcelStudentImport({ schoolId, role }: ExcelStudentImportProps) 
     },
     onSuccess: (nextResult) => {
       setResult(nextResult);
+      setSuccessVisible(true);
       queryClient.invalidateQueries({ queryKey: ['students', schoolId] });
     },
   });
@@ -187,8 +310,11 @@ export function ExcelStudentImport({ schoolId, role }: ExcelStudentImportProps) 
     setIsParsing(true);
 
     try {
-      const parsedRows = await parseWorkbook(asset.uri, schoolId);
-      setRows(parsedRows);
+      const parsedWorkbook = await parseWorkbook(asset.uri, schoolId);
+      setRows(parsedWorkbook.previewRows);
+      setRawRows(parsedWorkbook.rows);
+      setHeaders(parsedWorkbook.headers);
+      setColumnMapping(parsedWorkbook.mapping);
     } catch (error) {
       setRows([]);
       setParseError(error instanceof Error ? error.message : 'Unable to parse Excel file.');
@@ -200,9 +326,32 @@ export function ExcelStudentImport({ schoolId, role }: ExcelStudentImportProps) 
   const resetImport = () => {
     setFileName(null);
     setRows([]);
+    setRawRows([]);
+    setHeaders([]);
+    setColumnMapping(null);
     setParseError(null);
     setProgress(0);
     setResult(null);
+  };
+
+  const remapColumn = async (column: SupportedColumn) => {
+    if (!schoolId || headers.length === 0 || !columnMapping) {
+      return;
+    }
+
+    const currentIndex = Math.max(headers.indexOf(columnMapping[column]), -1);
+    const nextMapping = {
+      ...columnMapping,
+      [column]: headers[(currentIndex + 1) % headers.length],
+    };
+
+    setColumnMapping(nextMapping);
+    setIsParsing(true);
+    try {
+      setRows(await buildPreviewRows(rawRows, schoolId, nextMapping));
+    } finally {
+      setIsParsing(false);
+    }
   };
 
   return (
@@ -211,6 +360,9 @@ export function ExcelStudentImport({ schoolId, role }: ExcelStudentImportProps) 
         <View>
           <Text style={styles.sectionTitle}>Excel student import</Text>
           <Text style={styles.helperText}>Upload .xlsx or .xls files into this school only.</Text>
+          <Text style={styles.helperText}>
+            Supported columns: {supportedColumns.map((column) => columnLabels[column]).join(', ')}
+          </Text>
         </View>
         <Pressable onPress={chooseFile} style={styles.iconAction}>
           <AppIcon color={theme.colors.primary} name="upload" size={20} />
@@ -242,25 +394,50 @@ export function ExcelStudentImport({ schoolId, role }: ExcelStudentImportProps) 
             <Text style={styles.summaryText}>{rows.length} total</Text>
           </View>
 
+          {columnMapping ? (
+            <View style={styles.mappingGrid}>
+              {supportedColumns.map((column) => (
+                <Pressable
+                  key={column}
+                  onPress={() => remapColumn(column)}
+                  style={styles.mappingChip}
+                >
+                  <Text style={styles.mappingLabel}>{columnLabels[column]}</Text>
+                  <Text style={styles.mappingValue}>{columnMapping[column] || 'Unmapped'}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.table}>
               <View style={[styles.tableRow, styles.tableHeader]}>
-                {['Student ID', 'First name', 'Last name', 'Class', 'Gender', 'DOB', 'Status'].map(
-                  (heading) => (
-                    <Text key={heading} style={[styles.cell, styles.headingCell]}>
-                      {heading}
-                    </Text>
-                  ),
-                )}
+                {[
+                  'Student Number',
+                  'Student Name',
+                  'Surname',
+                  'Grade',
+                  'DOB',
+                  'Parent',
+                  'Email',
+                  'Phone',
+                  'Status',
+                ].map((heading) => (
+                  <Text key={heading} style={[styles.cell, styles.headingCell]}>
+                    {heading}
+                  </Text>
+                ))}
               </View>
               {rows.slice(0, 30).map((row) => (
                 <View key={`${row.studentId}-${row.rowNumber}`} style={styles.tableRow}>
-                  <Text style={styles.cell}>{row.studentId || '-'}</Text>
+                  <Text style={styles.cell}>{row.studentNumber || row.studentId || '-'}</Text>
                   <Text style={styles.cell}>{row.firstName || '-'}</Text>
-                  <Text style={styles.cell}>{row.lastName || '-'}</Text>
-                  <Text style={styles.cell}>{row.class || '-'}</Text>
-                  <Text style={styles.cell}>{row.gender || '-'}</Text>
+                  <Text style={styles.cell}>{row.surname || '-'}</Text>
+                  <Text style={styles.cell}>{row.grade || '-'}</Text>
                   <Text style={styles.cell}>{row.dob || '-'}</Text>
+                  <Text style={styles.cell}>{row.parentName || '-'}</Text>
+                  <Text style={styles.cell}>{row.parentEmail || '-'}</Text>
+                  <Text style={styles.cell}>{row.parentPhone || '-'}</Text>
                   <Text style={[styles.cell, row.errors.length ? styles.error : styles.ok]}>
                     {row.errors.length
                       ? row.errors.join(', ')
@@ -312,6 +489,12 @@ export function ExcelStudentImport({ schoolId, role }: ExcelStudentImportProps) 
           ))}
         </View>
       ) : null}
+      <SuccessModal
+        message="Student import has been processed."
+        onClose={() => setSuccessVisible(false)}
+        title="Creation Successful"
+        visible={successVisible}
+      />
     </Card>
   );
 }
@@ -378,6 +561,31 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
+  },
+  mappingGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  mappingChip: {
+    backgroundColor: '#F8FAFC',
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: 2,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    width: 160,
+  },
+  mappingLabel: {
+    color: theme.colors.mutedText,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mappingValue: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: '800',
   },
   table: {
     borderColor: theme.colors.border,

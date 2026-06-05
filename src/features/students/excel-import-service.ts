@@ -5,11 +5,14 @@ import { assertTenantSchoolId, schoolCollectionPath } from '@/services/tenant/pa
 
 export type ExcelStudentRecord = {
   studentId: string;
+  studentNumber: string;
   firstName: string;
-  lastName: string;
-  class: string;
-  gender: string;
+  surname: string;
+  grade: string;
   dob: string;
+  parentName: string;
+  parentEmail: string;
+  parentPhone: string;
   schoolId: string;
 };
 
@@ -72,7 +75,7 @@ export async function batchUploadStudents(
     const batch = writeBatch(firestore);
 
     chunk.forEach((student) => {
-      const fullName = `${student.firstName} ${student.lastName}`.trim();
+      const fullName = `${student.firstName} ${student.surname}`.trim();
       const reference = doc(
         firestore,
         schoolCollectionPath(tenantSchoolId, 'students'),
@@ -83,13 +86,16 @@ export async function batchUploadStudents(
         reference,
         {
           studentId: student.studentId,
+          studentNumber: student.studentNumber,
           firstName: student.firstName,
-          lastName: student.lastName,
+          surname: student.surname,
+          lastName: student.surname,
           fullName,
-          class: student.class,
-          className: student.class,
-          gender: student.gender,
+          grade: student.grade,
           dob: student.dob,
+          parentName: student.parentName,
+          parentEmail: student.parentEmail,
+          parentPhone: student.parentPhone,
           schoolId: tenantSchoolId,
           updatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),

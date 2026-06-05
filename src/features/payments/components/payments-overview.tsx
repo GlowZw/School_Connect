@@ -1,4 +1,5 @@
-import { StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MetricCard } from '@/components/ui/metric-card';
 import { ListRow } from '@/components/ui/list-row';
@@ -9,13 +10,25 @@ import { theme } from '@/theme';
 type PaymentsOverviewProps = {
   invoices: FeeInvoice[];
   transactions: PaymentTransaction[];
+  requireBalanceReveal?: boolean;
 };
 
-export function PaymentsOverview({ invoices, transactions }: PaymentsOverviewProps) {
+export function PaymentsOverview({
+  invoices,
+  transactions,
+  requireBalanceReveal = false,
+}: PaymentsOverviewProps) {
+  const [showBalance, setShowBalance] = useState(false);
   const totalPaid = transactions
     .filter((transaction) => transaction.status === 'paid')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
   const pending = invoices.reduce((sum, invoice) => sum + invoice.outstandingAmount, 0);
+  const outstandingBalance =
+    requireBalanceReveal && !showBalance ? '********' : formatCurrency(pending);
+
+  const toggleBalanceVisibility = () => {
+    setShowBalance((prev) => !prev);
+  };
 
   return (
     <View style={styles.wrapper}>
@@ -24,8 +37,26 @@ export function PaymentsOverview({ invoices, transactions }: PaymentsOverviewPro
         subtitle="Balances, receipts, server-verified transactions, and provider abstraction."
       />
       <View style={styles.metrics}>
-        <MetricCard label="Total Paid" value={`$${totalPaid}`} />
-        <MetricCard label="Outstanding" value={`$${pending}`} meta="Secure verification enabled" />
+        <MetricCard label="Total Paid" value={formatCurrency(totalPaid)} />
+        <MetricCard
+          label={requireBalanceReveal ? 'Outstanding Balance' : 'Outstanding'}
+          value={outstandingBalance}
+          meta="Secure verification enabled"
+        />
+        {requireBalanceReveal ? (
+          <Pressable
+            accessibilityLabel="Toggle fees balance visibility"
+            onPress={toggleBalanceVisibility}
+            style={({ pressed }) => [
+              styles.toggleButton,
+              pressed ? styles.toggleButtonPressed : null,
+            ]}
+          >
+            <Text style={styles.toggleButtonLabel}>
+              {showBalance ? 'Hide Balance' : 'Click to View'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       {transactions.map((transaction) => (
         <ListRow
@@ -53,11 +84,28 @@ function formatDate(value: PaymentTransaction['createdAt']) {
   return date.toLocaleDateString();
 }
 
+function formatCurrency(value: number) {
+  return `$${value}`;
+}
+
 const styles = StyleSheet.create({
   wrapper: {
     gap: theme.spacing.md,
   },
   metrics: {
     gap: theme.spacing.md,
+  },
+  toggleButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
+    paddingVertical: 14,
+  },
+  toggleButtonPressed: {
+    opacity: 0.85,
+  },
+  toggleButtonLabel: {
+    color: theme.colors.surface,
+    fontWeight: '700',
   },
 });

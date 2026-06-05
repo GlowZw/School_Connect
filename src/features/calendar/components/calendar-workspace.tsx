@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  Linking,
   View,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
@@ -16,13 +17,12 @@ import { Card } from '@/components/ui/card';
 import { Chip } from '@/components/ui/chip';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Screen } from '@/components/ui/screen';
-import {
-  calendarEventsQueryKey,
-  useCalendarEvents,
-} from '@/features/calendar/use-calendar-events';
+import { SuccessModal } from '@/components/ui/status-modal';
+import { calendarEventsQueryKey, useCalendarEvents } from '@/features/calendar/use-calendar-events';
 import {
   createCalendarEvent,
   deleteCalendarEvent,
+  formatLocalDate,
   getCalendarEventDateKey,
   updateCalendarEvent,
 } from '@/features/calendar/service';
@@ -41,10 +41,6 @@ const audienceOptions: EventAudience[] = ['parents', 'students', 'teachers', 'cl
 const reminderOptions = ['1 day before', 'Night before', '2 hours before'];
 const filters: Array<'all' | EventCategory> = ['all', 'school', 'class', 'exam'];
 
-function formatDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
 function isEventVisibleToParent(event: CalendarEvent) {
   return event.audience.includes('parents') || event.audience.includes('class');
 }
@@ -54,7 +50,7 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
   const schoolId = profile?.schoolId;
   const canManage = mode === 'teacher' || mode === 'admin';
   const queryClient = useQueryClient();
-  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [filter, setFilter] = useState<'all' | EventCategory>('all');
   const [modalVisible, setModalVisible] = useState(false);
@@ -66,6 +62,10 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
   const [audience, setAudience] = useState<EventAudience[]>(['parents']);
   const [eventTime, setEventTime] = useState('09:00');
   const [reminders, setReminders] = useState<string[]>(['1 day before']);
+  const [integrationPromptVisible, setIntegrationPromptVisible] = useState(false);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [successTitle, setSuccessTitle] = useState('Creation Successful');
+  const [successMessage, setSuccessMessage] = useState('Calendar event has been saved.');
 
   const { data: rawEvents = [], isLoading } = useCalendarEvents(schoolId);
 
@@ -76,7 +76,12 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
   }, [filter, mode, rawEvents]);
 
   const selectedEvents = events.filter((event) => getCalendarEventDateKey(event) === selectedDate);
-  const upcomingEvents = events.filter((event) => getCalendarEventDateKey(event) >= formatDate(new Date()));
+  const upcomingEvents = events.filter(
+    (event) => getCalendarEventDateKey(event) >= formatLocalDate(new Date()),
+  );
+  const googleExportEvents = rawEvents
+    .filter((event) => (mode === 'parent' ? isEventVisibleToParent(event) : true))
+    .filter((event) => getCalendarEventDateKey(event) >= formatLocalDate(new Date()));
 
   const markedDates = useMemo(() => {
     return events.reduce<Record<string, { marked: boolean; selected?: boolean; dotColor: string }>>(
@@ -116,7 +121,7 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
 
   const openEditForm = (event: CalendarEvent) => {
     setEditingEvent(event);
-    setSelectedDate(event.date);
+    setSelectedDate(getCalendarEventDateKey(event));
     setTitle(event.title);
     setDescription(event.description);
     setCategory(event.category);
@@ -150,6 +155,9 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
       await queryClient.invalidateQueries({ queryKey: calendarEventsQueryKey(schoolId) });
       setModalVisible(false);
       resetForm();
+      setSuccessTitle('Creation Successful');
+      setSuccessMessage('Calendar event has been saved.');
+      setSuccessVisible(true);
     },
   });
 
@@ -158,13 +166,36 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: calendarEventsQueryKey(schoolId) }),
   });
 
-  const eventList = viewMode === 'upcoming' || viewMode === 'list' ? upcomingEvents : selectedEvents;
+  const eventList =
+    viewMode === 'upcoming' || viewMode === 'list' ? upcomingEvents : selectedEvents;
+  const integrateWithGoogleCalendar = () => {
+    if (googleExportEvents.length === 0) {
+      setIntegrationPromptVisible(false);
+      return;
+    }
+
+    setIntegrationPromptVisible(false);
+    setSuccessTitle('Calendar Export Ready');
+    setSuccessMessage(
+      'Upcoming school calendar events have been opened for Google Calendar export.',
+    );
+    setSuccessVisible(true);
+    googleExportEvents.forEach((event) => {
+      Linking.openURL(toGoogleCalendarUrl(event)).catch(() => undefined);
+    });
+  };
 
   return (
     <Screen scrollable>
       <View style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>{mode === 'parent' ? 'Parent Portal' : mode === 'teacher' ? 'Teacher Portal' : 'Admin Portal'}</Text>
+          <Text style={styles.eyebrow}>
+            {mode === 'parent'
+              ? 'Parent Portal'
+              : mode === 'teacher'
+                ? 'Teacher Portal'
+                : 'Admin Portal'}
+          </Text>
           <Text style={styles.title}>Calendar</Text>
         </View>
         {canManage ? (
@@ -204,6 +235,14 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
         </View>
       ) : null}
 
+      {mode === 'parent' ? (
+        <PrimaryButton
+          disabled={googleExportEvents.length === 0}
+          label="Add to Google Calendar"
+          onPress={() => setIntegrationPromptVisible(true)}
+        />
+      ) : null}
+
       {viewMode === 'month' || viewMode === 'week' ? (
         <Card>
           <Calendar
@@ -233,45 +272,48 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
       ) : (
         eventList.map((event) => (
           <Pressable key={event.id} onPress={() => setSelectedEvent(event)}>
-          <Card>
-            <View style={styles.eventHeader}>
-              <View style={styles.eventTitleGroup}>
-                <Text style={styles.eventTitle}>{event.title}</Text>
-                <Text style={styles.eventMeta}>
-                  {getCalendarEventDateKey(event)} at {event.time}
-                </Text>
+            <Card>
+              <View style={styles.eventHeader}>
+                <View style={styles.eventTitleGroup}>
+                  <Text style={styles.eventTitle}>{event.title}</Text>
+                  <Text style={styles.eventMeta}>
+                    {getCalendarEventDateKey(event)} at {event.time}
+                  </Text>
+                </View>
+                <Chip label={event.category} tone="accent" />
               </View>
-              <Chip label={event.category} tone="accent" />
-            </View>
-            {event.description ? <Text style={styles.description}>{event.description}</Text> : null}
-            {event.createdByName ? (
-              <Text style={styles.eventMeta}>Teacher: {event.createdByName}</Text>
-            ) : null}
-            <Text style={styles.eventMeta}>Reminders: {event.reminderTimes.join(', ')}</Text>
-            {canManage ? (
-              <View style={styles.actions}>
-                <Pressable
-                  onPress={() => openEditForm(event)}
-                  style={styles.secondaryButton}
-                >
-                  <AppIcon color={theme.colors.primary} name="edit-2" size={16} />
-                  <Text style={styles.secondaryButtonText}>Edit</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => deleteMutation.mutate(event.id)}
-                  style={styles.dangerButton}
-                >
-                  <AppIcon color={theme.colors.danger} name="trash-2" size={16} />
-                  <Text style={styles.dangerButtonText}>Delete</Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </Card>
+              {event.description ? (
+                <Text style={styles.description}>{event.description}</Text>
+              ) : null}
+              {event.createdByName ? (
+                <Text style={styles.eventMeta}>Teacher: {event.createdByName}</Text>
+              ) : null}
+              <Text style={styles.eventMeta}>Reminders: {event.reminderTimes.join(', ')}</Text>
+              {canManage ? (
+                <View style={styles.actions}>
+                  <Pressable onPress={() => openEditForm(event)} style={styles.secondaryButton}>
+                    <AppIcon color={theme.colors.primary} name="edit-2" size={16} />
+                    <Text style={styles.secondaryButtonText}>Edit</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => deleteMutation.mutate(event.id)}
+                    style={styles.dangerButton}
+                  >
+                    <AppIcon color={theme.colors.danger} name="trash-2" size={16} />
+                    <Text style={styles.dangerButtonText}>Delete</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </Card>
           </Pressable>
         ))
       )}
 
-      <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
         <Screen scrollable>
           <View style={styles.header}>
             <Text style={styles.title}>{editingEvent ? 'Edit Event' : 'Add Event'}</Text>
@@ -401,7 +443,9 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
                   Teacher: {selectedEvent.createdByName || 'School staff'}
                 </Text>
                 <Text style={styles.eventMeta}>Category: {selectedEvent.category}</Text>
-                <Text style={styles.description}>{selectedEvent.description || 'No description.'}</Text>
+                <Text style={styles.description}>
+                  {selectedEvent.description || 'No description.'}
+                </Text>
                 <Text style={styles.eventMeta}>
                   Upcoming reminders: {selectedEvent.reminderTimes.join(', ') || 'None'}
                 </Text>
@@ -420,8 +464,60 @@ export function CalendarWorkspace({ mode }: CalendarWorkspaceProps) {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setIntegrationPromptVisible(false)}
+        transparent
+        visible={integrationPromptVisible && mode === 'parent'}
+      >
+        <View style={styles.integrationBackdrop}>
+          <View style={styles.integrationCard}>
+            <Text style={styles.sectionTitle}>Integrate School Calendar with Google Calendar?</Text>
+            <View style={styles.actions}>
+              <PrimaryButton
+                disabled={googleExportEvents.length === 0}
+                label="Integrate"
+                onPress={integrateWithGoogleCalendar}
+                style={styles.integrationButton}
+              />
+              <Pressable
+                onPress={() => setIntegrationPromptVisible(false)}
+                style={styles.secondaryButton}
+              >
+                <Text style={styles.secondaryButtonText}>Not Now</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <SuccessModal
+        message={successMessage}
+        onClose={() => setSuccessVisible(false)}
+        title={successTitle}
+        visible={successVisible}
+      />
     </Screen>
   );
+}
+
+function toGoogleDateTime(date: string, time: string) {
+  return `${date.replace(/-/g, '')}T${time.replace(':', '')}00`;
+}
+
+function addOneHour(time: string) {
+  const [hour = 0, minute = 0] = time.split(':').map(Number);
+  return `${String((hour + 1) % 24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function toGoogleCalendarUrl(event: CalendarEvent) {
+  const start = toGoogleDateTime(event.date, event.time);
+  const end = toGoogleDateTime(event.date, addOneHour(event.time));
+
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+    event.title,
+  )}&details=${encodeURIComponent(event.description || 'School calendar event')}&dates=${start}/${end}`;
 }
 
 const styles = StyleSheet.create({
@@ -599,5 +695,26 @@ const styles = StyleSheet.create({
   },
   detailContent: {
     gap: theme.spacing.md,
+  },
+  integrationBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(19,28,48,0.38)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: theme.spacing.lg,
+  },
+  integrationCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    maxWidth: 420,
+    padding: theme.spacing.lg,
+    width: '100%',
+  },
+  integrationButton: {
+    minWidth: 120,
+    paddingHorizontal: theme.spacing.md,
   },
 });

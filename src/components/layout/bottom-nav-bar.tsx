@@ -14,6 +14,7 @@ type BottomNavItem = {
 
 type BottomNavBarProps = {
   activeKey: BottomNavKey | null;
+  hiddenKeys?: BottomNavKey[];
   onPress: (key: BottomNavKey) => void;
 };
 
@@ -25,10 +26,12 @@ const items: BottomNavItem[] = [
   { key: 'settings', label: 'Settings', iconName: 'settings' },
 ];
 
-export function BottomNavBar({ activeKey, onPress }: BottomNavBarProps) {
+export function BottomNavBar({ activeKey, hiddenKeys = [], onPress }: BottomNavBarProps) {
+  const visibleItems = items.filter((item) => !hiddenKeys.includes(item.key));
+
   return (
     <View style={styles.container}>
-      {items.map((item) => (
+      {visibleItems.map((item) => (
         <BottomNavButton
           active={activeKey === item.key}
           iconName={item.iconName}

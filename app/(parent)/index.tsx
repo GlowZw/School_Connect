@@ -7,12 +7,9 @@ import { PortalHero } from '@/components/ui/portal-hero';
 import { Screen } from '@/components/ui/screen';
 import { roleNavigationItems } from '@/constants/navigation';
 import { sampleConversations } from '@/features/messaging/service';
-import { sampleInvoices } from '@/features/payments/service';
 import { theme } from '@/theme';
 
 export default function ParentDashboardScreen() {
-  const outstanding = sampleInvoices.reduce((sum, invoice) => sum + invoice.outstandingAmount, 0);
-
   return (
     <Screen scrollable>
       <PortalHero
@@ -22,11 +19,6 @@ export default function ParentDashboardScreen() {
       />
       <View style={styles.metrics}>
         <MetricCard label="Unread Messages" value={`${sampleConversations[0]?.unreadCount ?? 0}`} />
-        <MetricCard
-          label="Outstanding Fees"
-          value={`$${outstanding}`}
-          meta="Payment verification is server-side"
-        />
       </View>
       <ModuleDashboard
         modules={roleNavigationItems.parent.filter((item) => item.label !== 'Dashboard')}

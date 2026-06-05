@@ -1,10 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  listAttendanceRecords,
-  subscribeAttendanceRecords,
-} from '@/features/attendance/service';
+import { listAttendanceRecords, subscribeAttendanceRecords } from '@/features/attendance/service';
 import type { AttendanceRecord } from '@/types/attendance';
 
 export function attendanceQueryKey(
@@ -19,12 +16,14 @@ export function useAttendanceRecords(
   options: { studentId?: string; classId?: string } = {},
 ) {
   const queryClient = useQueryClient();
-  const queryKey = attendanceQueryKey(schoolId, options);
+  const studentId = options.studentId;
+  const classId = options.classId;
+  const queryKey = attendanceQueryKey(schoolId, { studentId, classId });
 
   const query = useQuery({
     enabled: Boolean(schoolId),
     queryKey,
-    queryFn: () => listAttendanceRecords(schoolId ?? '', options),
+    queryFn: () => listAttendanceRecords(schoolId ?? '', { studentId, classId }),
   });
 
   useEffect(() => {
@@ -32,10 +31,17 @@ export function useAttendanceRecords(
       return undefined;
     }
 
-    return subscribeAttendanceRecords(schoolId, options, (records) => {
-      queryClient.setQueryData<AttendanceRecord[]>(queryKey, records);
+    const unsubscribe = subscribeAttendanceRecords(schoolId, { studentId, classId }, (records) => {
+      queryClient.setQueryData<AttendanceRecord[]>(
+        attendanceQueryKey(schoolId, { studentId, classId }),
+        records,
+      );
     });
-  }, [options, queryClient, queryKey, schoolId]);
+
+    return () => {
+      unsubscribe();
+    };
+  }, [classId, queryClient, schoolId, studentId]);
 
   return query;
 }
